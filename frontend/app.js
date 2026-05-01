@@ -167,7 +167,7 @@ function initSetup() {
 
   testBtn.addEventListener('click', async () => {
     const url = urlInput.value.trim().replace(/\/+$/, '');
-    if (!url) return;
+    if (!url) { alert('Enter the server URL first.'); return; }
     testBtn.disabled = true;
     testBtn.textContent = 'Testing…';
     testResult.className = 'test-result hidden';
