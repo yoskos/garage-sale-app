@@ -97,7 +97,9 @@ async function apiPrice(imageBlob, notes) {
     headers: { 'Content-Type': contentType, 'X-Timestamp': ts, 'X-Signature': sig },
     body,
   });
-  const data = await resp.json();
+  let data;
+  try { data = await resp.json(); }
+  catch { throw Object.assign(new Error(`HTTP ${resp.status}`), { status: resp.status }); }
   if (!resp.ok) throw Object.assign(new Error(data.detail || resp.statusText), { status: resp.status, data });
   return data;
 }
