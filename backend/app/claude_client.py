@@ -1,8 +1,12 @@
 import asyncio
 import base64
 import json
+import logging
+import re
 
 import anthropic
+
+log = logging.getLogger(__name__)
 
 from .settings import settings
 
@@ -70,8 +74,14 @@ async def identify_and_price(image_bytes: bytes, notes: str | None) -> dict:
                 messages=[{"role": "user", "content": user_content}],
             )
             text = next(
-                b.text for b in response.content if b.type == "text"
+                (b.text for b in response.content if b.type == "text"), ""
             )
+            log.info("Claude stop_reason=%s text=%r", response.stop_reason, text[:200])
+            # Strip markdown code fences if the model wrapped the JSON
+            text = re.sub(r"^```(?:json)?\s*", "", text.strip(), flags=re.IGNORECASE)
+            text = re.sub(r"\s*```$", "", text)
+            if not text:
+                raise ValueError(f"Empty response from Claude (stop_reason={response.stop_reason})")
             return json.loads(text)
         except anthropic.APIStatusError as exc:
             last_exc = exc
