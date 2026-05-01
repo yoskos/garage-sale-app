@@ -58,7 +58,7 @@ async def identify_and_price(image_bytes: bytes, notes: str | None) -> dict:
     for attempt in range(3):
         try:
             response = await client.messages.create(
-                model="claude-opus-4-7",
+                model="claude-sonnet-4-6",
                 max_tokens=512,
                 system=[
                     {

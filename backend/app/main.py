@@ -1,8 +1,11 @@
+import logging
 import time
 import uuid
 from pathlib import Path
 
 from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
+
+log = logging.getLogger(__name__)
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -82,7 +85,8 @@ async def price_item(
 
     try:
         result = await identify_and_price(processed, notes)
-    except Exception:
+    except Exception as exc:
+        log.exception("Claude API error: %s", exc)
         raise HTTPException(status_code=503, detail="Claude API unavailable")
 
     request_id = str(uuid.uuid4())
