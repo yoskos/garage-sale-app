@@ -153,8 +153,8 @@ async def summary(request: Request) -> SummaryResponse:
     )
 
 
-@app.get("/")
-async def root() -> FileResponse | JSONResponse:
+@app.get("/", response_model=None)
+async def root():
     index = _FRONTEND_DIR / "index.html"
     if index.exists():
         return FileResponse(str(index))
