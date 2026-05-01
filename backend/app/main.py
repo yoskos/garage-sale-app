@@ -2,12 +2,12 @@ import time
 import uuid
 from pathlib import Path
 
-from fastapi import Depends, FastAPI, File, Form, HTTPException, Request, UploadFile
+from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from .auth import verify_hmac
+from .auth import HmacMiddleware
 from .cache import get_cached_price, store_price
 from .claude_client import identify_and_price
 from .db import get_conn, init_db
@@ -35,6 +35,7 @@ def _check_rate_limit(request: Request) -> None:
 
 app = FastAPI(title="Garage Sale Helper")
 
+app.add_middleware(HmacMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins.split(","),
@@ -55,7 +56,7 @@ def health() -> HealthResponse:
     return HealthResponse(ok=True)
 
 
-@app.post("/price", response_model=PriceResponse, dependencies=[Depends(verify_hmac)])
+@app.post("/price", response_model=PriceResponse)
 async def price_item(
     request: Request,
     image: UploadFile = File(...),
@@ -98,7 +99,7 @@ async def price_item(
     )
 
 
-@app.post("/sale", response_model=SaleResponse, dependencies=[Depends(verify_hmac)])
+@app.post("/sale", response_model=SaleResponse)
 async def log_sale(request: Request, body: SaleRequest) -> SaleResponse:
     _check_rate_limit(request)
     with get_conn() as conn:
@@ -119,7 +120,7 @@ async def log_sale(request: Request, body: SaleRequest) -> SaleResponse:
     return SaleResponse(logged=True, id=cur.lastrowid)
 
 
-@app.get("/summary", response_model=SummaryResponse, dependencies=[Depends(verify_hmac)])
+@app.get("/summary", response_model=SummaryResponse)
 async def summary(request: Request) -> SummaryResponse:
     _check_rate_limit(request)
     with get_conn() as conn:
