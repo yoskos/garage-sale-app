@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Receive item photos from the Android app, ask Claude to identify the item and suggest a fair garage-sale price, return the result, and log every sale outcome to a small SQLite database. Optimized for speed and one-day use.
+Receive item photos from the browser-based web frontend, ask Claude to identify the item and suggest a fair garage-sale price, return the result, and log every sale outcome to a small SQLite database. Optimized for speed and one-day use.
 
 ## Stack
 
@@ -19,14 +19,14 @@ Receive item photos from the Android app, ask Claude to identify the item and su
 This app runs for ~24 hours and holds no PII. Keep security simple but real:
 
 1. **Transport:** HTTPS only. Caddy handles TLS termination on port 443; FastAPI listens on `127.0.0.1:8000`.
-2. **Authentication:** HMAC-SHA256 shared-secret auth. Every request from the Android app includes:
+2. **Authentication:** HMAC-SHA256 shared-secret auth. Every request from the browser includes:
    - `X-Timestamp: <unix epoch seconds>`
    - `X-Signature: hex(HMAC_SHA256(secret, timestamp + ":" + sha256(body)))`
    - Server rejects requests with timestamp drift > 60 seconds (replay protection).
    - Server rejects requests with bad signature.
-3. **No user accounts.** The shared secret is provisioned once into all 2-3 phones via QR code or copy/paste before the sale.
+3. **No user accounts.** The shared secret is provisioned once into all 2-3 phones via copy/paste (or QR code printed by `deploy.sh`) and entered into the browser Setup screen before the sale.
 4. **Rate limit:** 30 requests/minute per IP (in-memory token bucket). Sufficient for 3 helpers.
-5. **CORS:** disabled (no browser clients).
+5. **CORS:** enabled for the production origin only (`https://garage.yoskos.com`). Allowed methods: `GET`, `POST`. Allowed headers: `Content-Type`, `X-Timestamp`, `X-Signature`. No credentials, no wildcards.
 6. **API key:** `ANTHROPIC_API_KEY` lives in `.env`, loaded via `pydantic-settings`. Never logged.
 
 ## Endpoints
@@ -181,7 +181,7 @@ CREATE INDEX idx_sales_created ON sales_log(created_at);
 backend/
 ├── app/
 │   ├── __init__.py
-│   ├── main.py            # FastAPI app, route definitions
+│   ├── main.py            # FastAPI app, route definitions, static file mount
 │   ├── auth.py            # HMAC verify dependency
 │   ├── claude_client.py   # Anthropic SDK wrapper, prompt caching
 │   ├── cache.py           # image-hash → response lookup
@@ -198,6 +198,11 @@ backend/
 ├── Caddyfile.example
 ├── garage-sale.service    # systemd unit
 └── deploy.sh              # provisioning script for fresh droplet
+
+frontend/                  # served by FastAPI at /; see frontend-spec.md
+├── index.html
+├── app.js
+└── style.css
 ```
 
 ## Deployment to DigitalOcean
@@ -226,5 +231,5 @@ backend/
 - User accounts, roles, login pages
 - Multi-day persistence, backups, replication
 - Image storage beyond local cache
-- Web UI (Android only)
+- Native Android app
 - Payments

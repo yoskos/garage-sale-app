@@ -1,8 +1,11 @@
 import time
 import uuid
+from pathlib import Path
 
 from fastapi import Depends, FastAPI, File, Form, HTTPException, Request, UploadFile
-from fastapi.responses import JSONResponse
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
 
 from .auth import verify_hmac
 from .cache import get_cached_price, store_price
@@ -13,6 +16,7 @@ from .schemas import HealthResponse, PriceResponse, SaleRequest, SaleResponse, S
 from .settings import settings
 
 _MAX_IMAGE_BYTES = 4 * 1024 * 1024  # 4 MB
+_FRONTEND_DIR = Path(__file__).parent.parent.parent / "frontend"
 
 # In-memory token bucket: ip -> (last_refill_ts, tokens)
 _rate_buckets: dict[str, tuple[float, float]] = {}
@@ -30,6 +34,13 @@ def _check_rate_limit(request: Request) -> None:
 
 
 app = FastAPI(title="Garage Sale Helper")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.cors_origins.split(","),
+    allow_methods=["GET", "POST"],
+    allow_headers=["Content-Type", "X-Timestamp", "X-Signature"],
+)
 
 
 @app.on_event("startup")
@@ -140,3 +151,15 @@ async def summary(request: Request) -> SummaryResponse:
         avg_discount_vs_suggested=round(row["avg_discount"], 4),
         top_items=[{"item_label": r["item_label"], "sold_price_usd": r["sold_price_usd"]} for r in top_rows],
     )
+
+
+@app.get("/")
+async def root() -> FileResponse | JSONResponse:
+    index = _FRONTEND_DIR / "index.html"
+    if index.exists():
+        return FileResponse(str(index))
+    return JSONResponse({"message": "Garage Sale Helper API — frontend not deployed"})
+
+
+if _FRONTEND_DIR.exists():
+    app.mount("/static", StaticFiles(directory=str(_FRONTEND_DIR)), name="frontend")

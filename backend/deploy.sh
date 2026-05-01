@@ -54,13 +54,16 @@ else
     echo "  .env already exists, skipping"
 fi
 
-echo "=== 5. systemd service ==="
+echo "=== 5. Ownership ==="
+chown -R www-data:www-data "$APP_DIR"
+
+echo "=== 6. systemd service ==="
 cp "$APP_DIR/backend/garage-sale.service" /etc/systemd/system/${SERVICE}.service
 systemctl daemon-reload
 systemctl enable --now ${SERVICE}
 systemctl restart ${SERVICE}
 
-echo "=== 6. Caddy config ==="
+echo "=== 7. Caddy config ==="
 if [ -n "$DOMAIN" ]; then
     cat > /etc/caddy/Caddyfile <<EOF
 $DOMAIN {
@@ -77,7 +80,7 @@ EOF
 fi
 systemctl reload caddy
 
-echo "=== 7. Firewall ==="
+echo "=== 8. Firewall ==="
 ufw allow 443/tcp
 ufw allow 22/tcp
 ufw --force enable
@@ -90,8 +93,10 @@ if [ -n "$DOMAIN" ]; then
 else
     URL="https://$(curl -s ifconfig.me)"
 fi
-echo "Server: $URL"
-echo "Shared secret for phones: $SHARED_SECRET"
+echo "Frontend: $URL"
+echo "Shared secret:  $SHARED_SECRET"
 echo ""
-echo "QR code (scan on each phone):"
+echo "On each phone: open $URL, paste the secret above into the Setup screen."
+echo ""
+echo "QR code for the secret:"
 echo "$SHARED_SECRET" | qrencode -t UTF8 2>/dev/null || echo "  (install qrencode for QR: apt-get install qrencode)"
