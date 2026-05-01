@@ -89,19 +89,50 @@ async function apiHealth(url) {
   return resp.ok;
 }
 
-async function apiPrice(imageBlob, notes) {
+async function apiPrice(imageBlob, notes, { onStatus, onProgress } = {}) {
+  onStatus?.('Building request…');
   const { body, contentType } = await buildMultipart(imageBlob, notes);
   const { ts, sig } = await sign(cfg.secret, body);
-  const resp = await fetch(`${cfg.url}/price`, {
-    method: 'POST',
-    headers: { 'Content-Type': contentType, 'X-Timestamp': ts, 'X-Signature': sig },
-    body,
+
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', `${cfg.url}/price`);
+    xhr.setRequestHeader('Content-Type', contentType);
+    xhr.setRequestHeader('X-Timestamp', ts);
+    xhr.setRequestHeader('X-Signature', sig);
+
+    xhr.upload.addEventListener('progress', e => {
+      if (e.lengthComputable) {
+        const pct = e.loaded / e.total;
+        onProgress?.(Math.round(pct * 70));
+        onStatus?.(`Uploading… ${Math.round(pct * 100)}%`);
+      }
+    });
+
+    xhr.upload.addEventListener('load', () => {
+      onProgress?.(75);
+      onStatus?.('Analyzing item…');
+    });
+
+    xhr.addEventListener('load', () => {
+      onProgress?.(100);
+      let data;
+      try { data = JSON.parse(xhr.responseText); } catch {
+        reject(Object.assign(new Error(`HTTP ${xhr.status}`), { status: xhr.status }));
+        return;
+      }
+      if (xhr.status >= 200 && xhr.status < 300) {
+        resolve(data);
+      } else {
+        reject(Object.assign(new Error(data?.detail || xhr.statusText), { status: xhr.status, data }));
+      }
+    });
+
+    xhr.addEventListener('error', () =>
+      reject(Object.assign(new Error('Network error — check connection'), { status: 0 })));
+
+    xhr.send(body);
   });
-  let data;
-  try { data = await resp.json(); }
-  catch { throw Object.assign(new Error(`HTTP ${resp.status}`), { status: resp.status }); }
-  if (!resp.ok) throw Object.assign(new Error(data.detail || resp.statusText), { status: resp.status, data });
-  return data;
 }
 
 async function apiSale(requestId, itemLabel, suggestedPrice, soldPrice, sold) {
@@ -227,11 +258,13 @@ function initCapture() {
     if (!file) return;
     photoInput.value = '';
     errorBox.classList.add('hidden');
+    startLoading('Preparing image…');
     try {
       capturedBlob = await prepareImage(file);
       lastNotes = notesInput.value;
       await submitPrice();
     } catch (err) {
+      stopLoading();
       showCaptureError('Failed to process image — try again.');
     }
   });
@@ -239,24 +272,28 @@ function initCapture() {
   retryBtn.addEventListener('click', async () => {
     if (!capturedBlob) return;
     errorBox.classList.add('hidden');
+    startLoading('Retrying…');
     await submitPrice();
   });
 
   async function submitPrice() {
-    startLoading();
     try {
-      lastResult = await apiPrice(capturedBlob, lastNotes);
+      lastResult = await apiPrice(capturedBlob, lastNotes, {
+        onStatus: setStatus,
+        onProgress: setProgress,
+      });
       stopLoading();
       showResult();
     } catch (err) {
       stopLoading();
-      const msg = errorMessage(err);
-      showCaptureError(msg);
+      showCaptureError(errorMessage(err));
       if (err.status === 401) showView('view-setup');
     }
   }
 
-  function startLoading() {
+  function startLoading(initialStatus = 'Preparing…') {
+    setStatus(initialStatus);
+    setProgress(0);
     let secs = 0;
     elapsedEl.textContent = '0s';
     overlay.classList.remove('hidden');
@@ -266,6 +303,14 @@ function initCapture() {
   function stopLoading() {
     clearInterval(elapsedTimer);
     overlay.classList.add('hidden');
+  }
+
+  function setStatus(text) {
+    document.getElementById('status-label').textContent = text;
+  }
+
+  function setProgress(pct) {
+    document.getElementById('progress-fill').style.width = `${pct}%`;
   }
 
   function showCaptureError(msg) {
