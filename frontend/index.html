@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <title>Garage Sale</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+
+  <div id="no-crypto-banner" class="banner hidden">
+    ⚠️ Must be opened over HTTPS — crypto unavailable. Open <strong>https://</strong> instead.
+  </div>
+
+  <!-- ── Setup ─────────────────────────────────────────────────────────── -->
+  <div id="view-setup" class="view hidden">
+    <div class="view-inner">
+      <h1>Garage Sale Setup</h1>
+      <p class="muted">Enter once before the sale.</p>
+
+      <label class="field-label">Server URL
+        <input id="setup-url" type="url" inputmode="url"
+               placeholder="https://garage.yoskos.com" autocomplete="off">
+      </label>
+
+      <label class="field-label">Shared Secret
+        <input id="setup-secret" type="text" inputmode="text"
+               placeholder="paste the secret from the deploy output" autocomplete="off">
+      </label>
+
+      <button id="setup-test-btn" class="btn secondary">Test Connection</button>
+      <div id="setup-test-result" class="test-result hidden"></div>
+
+      <button id="setup-save-btn" class="btn primary">Save &amp; Continue</button>
+    </div>
+  </div>
+
+  <!-- ── Capture ───────────────────────────────────────────────────────── -->
+  <div id="view-capture" class="view hidden">
+    <div class="top-bar">
+      <button id="capture-settings-btn" class="link-btn">Settings</button>
+      <span class="top-title">Garage Sale</span>
+      <button id="capture-history-btn" class="link-btn">History</button>
+    </div>
+
+    <div class="capture-body">
+      <input type="file" id="photo-input" accept="image/*" capture="environment" class="hidden">
+
+      <button id="shutter-btn" class="shutter-btn">
+        <span class="shutter-icon">📷</span>
+        <span>Take Photo</span>
+      </button>
+
+      <div class="notes-row">
+        <button id="notes-toggle" class="link-btn small">＋ Add notes</button>
+        <input type="text" id="notes-input" class="notes-input hidden"
+               placeholder="e.g. works, missing remote" maxlength="200">
+      </div>
+
+      <div id="capture-error" class="error-box hidden">
+        <span id="capture-error-msg"></span>
+        <button id="retry-btn" class="btn secondary small">Retry</button>
+      </div>
+    </div>
+
+    <div id="loading-overlay" class="overlay hidden">
+      <div class="overlay-content">
+        <div id="elapsed-display" class="elapsed">0s</div>
+        <div class="overlay-label">Identifying item…</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Result ────────────────────────────────────────────────────────── -->
+  <div id="view-result" class="view hidden">
+    <div class="view-inner">
+      <div class="result-card">
+        <div class="result-top">
+          <h2 id="result-item" class="result-item"></h2>
+          <span id="result-cached" class="badge hidden">cached</span>
+        </div>
+        <div id="result-price" class="result-price"></div>
+        <div id="result-range" class="result-range"></div>
+        <hr class="divider">
+        <div id="result-condition" class="muted small"></div>
+        <div id="result-rationale" class="muted small"></div>
+      </div>
+
+      <div id="sold-form" class="sold-form hidden">
+        <label class="field-label inline">
+          Sold for $
+          <input type="number" id="sold-price-input" min="0" step="0.5"
+                 inputmode="decimal" class="price-input">
+        </label>
+        <div class="sold-form-btns">
+          <button id="sold-confirm-btn" class="btn primary">Confirm</button>
+          <button id="sold-cancel-btn" class="btn secondary">Cancel</button>
+        </div>
+      </div>
+
+      <div id="result-actions" class="result-actions">
+        <button id="sold-btn" class="btn primary">Sold</button>
+        <button id="not-sold-btn" class="btn secondary">Not sold</button>
+        <button id="reshoot-btn" class="link-btn">Re-shoot</button>
+      </div>
+
+      <div id="result-error" class="error-box hidden">
+        <span id="result-error-msg"></span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── History ───────────────────────────────────────────────────────── -->
+  <div id="view-history" class="view hidden">
+    <div class="top-bar">
+      <button id="history-back-btn" class="link-btn">← Back</button>
+      <span class="top-title">History</span>
+      <button id="history-refresh-btn" class="link-btn">Refresh</button>
+    </div>
+    <div id="history-content" class="view-inner"></div>
+  </div>
+
+  <script src="/static/app.js" type="module"></script>
+</body>
+</html>
