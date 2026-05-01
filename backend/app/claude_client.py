@@ -41,20 +41,19 @@ def _get_client() -> anthropic.AsyncAnthropic:
     return _client
 
 
-async def identify_and_price(image_bytes: bytes, notes: str | None) -> dict:
+async def identify_and_price(images_bytes: list[bytes], notes: str | None) -> dict:
     client = _get_client()
-    image_b64 = base64.standard_b64encode(image_bytes).decode()
 
-    user_content: list[dict] = [
-        {
+    user_content: list[dict] = []
+    for image_bytes in images_bytes:
+        user_content.append({
             "type": "image",
             "source": {
                 "type": "base64",
                 "media_type": "image/jpeg",
-                "data": image_b64,
+                "data": base64.standard_b64encode(image_bytes).decode(),
             },
-        }
-    ]
+        })
     if notes:
         user_content.append({"type": "text", "text": f"Notes: {notes}"})
 

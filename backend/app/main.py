@@ -1,3 +1,4 @@
+import hashlib
 import logging
 import time
 import uuid
@@ -62,35 +63,44 @@ def health() -> HealthResponse:
 @app.post("/price", response_model=PriceResponse)
 async def price_item(
     request: Request,
-    image: UploadFile = File(...),
+    images: list[UploadFile] = File(...),
     notes: str | None = Form(None),
 ) -> PriceResponse:
     _check_rate_limit(request)
 
-    data = await image.read()
-    if len(data) > _MAX_IMAGE_BYTES:
-        raise HTTPException(status_code=413, detail="Image too large (max 4 MB)")
+    if not images or len(images) > 3:
+        raise HTTPException(status_code=400, detail="Send 1–3 images")
 
-    try:
-        processed, image_hash = preprocess_image(data)
-    except Exception:
-        raise HTTPException(status_code=400, detail="Invalid image")
+    all_processed: list[bytes] = []
+    all_hashes: list[str] = []
+    for img in images:
+        data = await img.read()
+        if len(data) > _MAX_IMAGE_BYTES:
+            raise HTTPException(status_code=413, detail="Image too large (max 4 MB)")
+        try:
+            processed, image_hash = preprocess_image(data)
+        except Exception:
+            raise HTTPException(status_code=400, detail="Invalid image")
+        all_processed.append(processed)
+        all_hashes.append(image_hash)
 
     notes_key = notes or ""
-    cached = get_cached_price(image_hash, notes_key)
+    combined_hash = hashlib.sha256(":".join(all_hashes).encode()).hexdigest()
+
+    cached = get_cached_price(combined_hash, notes_key)
     if cached is not None:
         return PriceResponse(cache_hit=True, request_id=cached["_request_id"], **{
             k: v for k, v in cached.items() if not k.startswith("_")
         })
 
     try:
-        result = await identify_and_price(processed, notes)
+        result = await identify_and_price(all_processed, notes)
     except Exception as exc:
         log.exception("Claude API error: %s", exc)
         raise HTTPException(status_code=503, detail="Claude API unavailable")
 
     request_id = str(uuid.uuid4())
-    store_price(image_hash, notes_key, request_id, {**result, "_request_id": request_id})
+    store_price(combined_hash, notes_key, request_id, {**result, "_request_id": request_id})
 
     return PriceResponse(
         cache_hit=False,

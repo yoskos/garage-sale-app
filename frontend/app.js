@@ -8,10 +8,10 @@ const cfg = {
 };
 
 // ─── State ───────────────────────────────────────────────────────────────────
-let lastResult   = null;   // PriceResponse from last /price call
-let capturedBlob = null;   // prepared image Blob (kept for retry)
-let lastNotes    = '';
-let elapsedTimer = null;
+let lastResult    = null;   // PriceResponse from last /price call
+let capturedBlobs = [];     // up to 3 prepared Blobs (kept for retry)
+let lastNotes     = '';
+let elapsedTimer  = null;
 
 // ─── Crypto ──────────────────────────────────────────────────────────────────
 async function sha256Hex(data /* Uint8Array | ArrayBuffer */) {
@@ -58,16 +58,19 @@ async function prepareImage(file) {
 }
 
 // Build a multipart body manually so we can sign the exact bytes we send.
-async function buildMultipart(imageBlob, notes) {
+async function buildMultipart(imageBlobs, notes) {
   const boundary = 'GSBoundary' + Math.random().toString(36).slice(2, 12);
   const enc = new TextEncoder();
-  const imageBytes = new Uint8Array(await imageBlob.arrayBuffer());
 
-  const parts = [
-    enc.encode(`--${boundary}\r\nContent-Disposition: form-data; name="image"; filename="photo.jpg"\r\nContent-Type: image/jpeg\r\n\r\n`),
-    imageBytes,
-    enc.encode('\r\n'),
-  ];
+  const parts = [];
+  for (const blob of imageBlobs) {
+    const imageBytes = new Uint8Array(await blob.arrayBuffer());
+    parts.push(
+      enc.encode(`--${boundary}\r\nContent-Disposition: form-data; name="images"; filename="photo.jpg"\r\nContent-Type: image/jpeg\r\n\r\n`),
+      imageBytes,
+      enc.encode('\r\n'),
+    );
+  }
   if (notes && notes.trim()) {
     parts.push(enc.encode(
       `--${boundary}\r\nContent-Disposition: form-data; name="notes"\r\n\r\n${notes.trim()}\r\n`,
@@ -89,9 +92,9 @@ async function apiHealth(url) {
   return resp.ok;
 }
 
-async function apiPrice(imageBlob, notes, { onStatus, onProgress } = {}) {
+async function apiPrice(imageBlobs, notes, { onStatus, onProgress } = {}) {
   onStatus?.('Building request…');
-  const { body, contentType } = await buildMultipart(imageBlob, notes);
+  const { body, contentType } = await buildMultipart(imageBlobs, notes);
   const { ts, sig } = await sign(cfg.secret, body);
 
   return new Promise((resolve, reject) => {
@@ -227,6 +230,41 @@ function initSetup() {
   });
 }
 
+// ─── Capture UI state (called from result view too) ──────────────────────────
+function updateCaptureUI() {
+  const count      = capturedBlobs.length;
+  const shutterBtn = document.getElementById('shutter-btn');
+  const strip      = document.getElementById('photo-strip');
+  const priceBtn   = document.getElementById('get-price-btn');
+
+  shutterBtn.querySelector('.shutter-label').textContent =
+    count === 0 ? 'Take Photo' : `Add photo (${count}/3)`;
+  shutterBtn.disabled = count >= 3;
+  strip.classList.toggle('hidden', count === 0);
+  priceBtn.classList.toggle('hidden', count === 0);
+
+  strip.innerHTML = '';
+  capturedBlobs.forEach((blob, i) => {
+    const url  = URL.createObjectURL(blob);
+    const wrap = document.createElement('div');
+    wrap.className = 'photo-thumb';
+    const img = document.createElement('img');
+    img.src = url;
+    img.alt = `Photo ${i + 1}`;
+    const rm = document.createElement('button');
+    rm.className = 'thumb-remove';
+    rm.textContent = '×';
+    rm.addEventListener('click', () => {
+      URL.revokeObjectURL(url);
+      capturedBlobs.splice(i, 1);
+      updateCaptureUI();
+    });
+    wrap.appendChild(img);
+    wrap.appendChild(rm);
+    strip.appendChild(wrap);
+  });
+}
+
 // ─── Capture view ─────────────────────────────────────────────────────────────
 function initCapture() {
   const photoInput  = document.getElementById('photo-input');
@@ -258,19 +296,27 @@ function initCapture() {
     if (!file) return;
     photoInput.value = '';
     errorBox.classList.add('hidden');
-    startLoading('Preparing image…');
+    shutterBtn.disabled = true;
     try {
-      capturedBlob = await prepareImage(file);
-      lastNotes = notesInput.value;
-      await submitPrice();
-    } catch (err) {
-      stopLoading();
+      const blob = await prepareImage(file);
+      capturedBlobs.push(blob);
+      updateCaptureUI();
+    } catch {
       showCaptureError('Failed to process image — try again.');
+      shutterBtn.disabled = capturedBlobs.length >= 3;
     }
   });
 
+  document.getElementById('get-price-btn').addEventListener('click', async () => {
+    if (!capturedBlobs.length) return;
+    lastNotes = notesInput.value;
+    errorBox.classList.add('hidden');
+    startLoading('Preparing…');
+    await submitPrice();
+  });
+
   retryBtn.addEventListener('click', async () => {
-    if (!capturedBlob) return;
+    if (!capturedBlobs.length) return;
     errorBox.classList.add('hidden');
     startLoading('Retrying…');
     await submitPrice();
@@ -278,7 +324,7 @@ function initCapture() {
 
   async function submitPrice() {
     try {
-      lastResult = await apiPrice(capturedBlob, lastNotes, {
+      lastResult = await apiPrice(capturedBlobs, lastNotes, {
         onStatus: setStatus,
         onProgress: setProgress,
       });
@@ -365,8 +411,9 @@ function initResult() {
   });
 
   reshootBtn.addEventListener('click', () => {
-    capturedBlob = null;
+    capturedBlobs = [];
     lastResult = null;
+    updateCaptureUI();
     showView('view-capture');
   });
 
@@ -389,8 +436,9 @@ function initResult() {
         soldPrice,
         sold,
       );
-      capturedBlob = null;
+      capturedBlobs = [];
       lastResult = null;
+      updateCaptureUI();
       showView('view-capture');
     } catch (err) {
       errorMsg.textContent = errorMessage(err);
