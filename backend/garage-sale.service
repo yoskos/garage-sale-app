@@ -1,0 +1,18 @@
+[Unit]
+Description=Garage Sale Helper (FastAPI)
+After=network.target
+
+[Service]
+Type=simple
+User=www-data
+WorkingDirectory=/opt/garage-sale-app/backend
+EnvironmentFile=/opt/garage-sale-app/backend/.env
+ExecStart=/opt/garage-sale-app/backend/.venv/bin/uvicorn app.main:app \
+    --host 127.0.0.1 \
+    --port 8000 \
+    --workers 1
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

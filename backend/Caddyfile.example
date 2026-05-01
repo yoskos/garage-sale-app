@@ -1,0 +1,10 @@
+# With a real domain (Let's Encrypt TLS):
+# your-domain.example.com {
+#     reverse_proxy 127.0.0.1:8000
+# }
+
+# Without a domain (self-signed on IP — browsers will warn):
+:443 {
+    tls internal
+    reverse_proxy 127.0.0.1:8000
+}
