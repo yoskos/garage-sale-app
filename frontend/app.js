@@ -605,11 +605,9 @@ function closeModal() {
 async function refreshSummary() {
   try {
     const s = await apiSummary();
-    const discount = Math.round(s.avg_discount_vs_suggested * 100);
     const vals = document.querySelectorAll('#history-content .stat-value');
-    if (vals[0]) vals[0].textContent = `${s.total_items_sold}/${s.total_items_priced}`;
+    if (vals[0]) vals[0].textContent = s.total_items_sold;
     if (vals[1]) vals[1].textContent = `$${s.total_revenue_usd.toFixed(0)}`;
-    if (vals[2]) vals[2].textContent = `${discount}%`;
   } catch { /* silent */ }
 }
 
@@ -617,11 +615,12 @@ async function downloadCsv() {
   try {
     const { entries } = await apiLedger();
     const rows = entries.filter(e => e.sold).map(e => {
-      const time = new Date(e.created_at * 1000).toLocaleString();
+      const d = new Date(e.created_at * 1000);
+      const dt = `${d.toLocaleDateString()} ${d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
       const item = `"${e.item_label.replace(/"/g, '""')}"`;
-      return `${time},${item},${e.sold_price_usd ?? ''}`;
+      return `${dt},${item},${e.sold_price_usd ?? ''}`;
     });
-    const csv = ['Time,Item,Price ($)', ...rows].join('\n');
+    const csv = ['Date/Time,Item,Price ($)', ...rows].join('\n');
     const a = Object.assign(document.createElement('a'), {
       href: URL.createObjectURL(new Blob([csv], { type: 'text/csv' })),
       download: 'garage-sale.csv',
@@ -638,7 +637,6 @@ async function loadHistory() {
   content.innerHTML = '<p class="history-loading">Loading…</p>';
   try {
     const [s, { entries }] = await Promise.all([apiSummary(), apiLedger()]);
-    const discount = Math.round(s.avg_discount_vs_suggested * 100);
     const sold = entries.filter(e => e.sold);
 
     content.innerHTML = `
@@ -646,16 +644,12 @@ async function loadHistory() {
         <h3>Today's Summary</h3>
         <div class="summary-stats">
           <div>
-            <div class="stat-value">${s.total_items_sold}/${s.total_items_priced}</div>
-            <div class="stat-label">Sold</div>
+            <div class="stat-value">${s.total_items_sold}</div>
+            <div class="stat-label">Items sold</div>
           </div>
           <div>
             <div class="stat-value">$${s.total_revenue_usd.toFixed(0)}</div>
-            <div class="stat-label">Revenue</div>
-          </div>
-          <div>
-            <div class="stat-value">${discount}%</div>
-            <div class="stat-label">Avg discount</div>
+            <div class="stat-label">Total</div>
           </div>
         </div>
       </div>
