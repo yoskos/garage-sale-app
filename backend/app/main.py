@@ -15,9 +15,10 @@ from .claude_client import identify_and_price, parse_sale_text
 from .db import get_conn, init_db
 from .images import preprocess_image
 from .schemas import (
-    HealthResponse, ParseSaleRequest, ParseSaleResponse,
+    HealthResponse, LedgerEntry, LedgerResponse,
+    ParseSaleRequest, ParseSaleResponse,
     PriceRequest, PriceResponse,
-    SaleRequest, SaleResponse, SummaryResponse, UploadResponse,
+    SaleRequest, SaleResponse, SaleUpdateRequest, SummaryResponse, UploadResponse,
 )
 from .settings import settings
 
@@ -48,7 +49,7 @@ app.add_middleware(HmacMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins.split(","),
-    allow_methods=["GET", "POST"],
+    allow_methods=["GET", "POST", "PATCH", "DELETE"],
     allow_headers=["Content-Type", "X-Timestamp", "X-Signature"],
 )
 
@@ -170,6 +171,53 @@ async def log_sale(request: Request, body: SaleRequest) -> SaleResponse:
             ),
         )
     return SaleResponse(logged=True, id=cur.lastrowid)
+
+
+@app.patch("/sale/{sale_id}", response_model=SaleResponse)
+async def update_sale(request: Request, sale_id: int, body: SaleUpdateRequest) -> SaleResponse:
+    _check_rate_limit(request)
+    fields: dict = {}
+    if body.item_label is not None:
+        fields["item_label"] = body.item_label
+    if body.sold_price_usd is not None:
+        fields["sold_price_usd"] = body.sold_price_usd
+    if not fields:
+        raise HTTPException(status_code=400, detail="Nothing to update")
+    set_clause = ", ".join(f"{k} = ?" for k in fields)
+    with get_conn() as conn:
+        conn.execute(
+            f"UPDATE sales_log SET {set_clause} WHERE id = ?",
+            (*fields.values(), sale_id),
+        )
+    return SaleResponse(logged=True, id=sale_id)
+
+
+@app.delete("/sale/{sale_id}", response_model=SaleResponse)
+async def delete_sale(request: Request, sale_id: int) -> SaleResponse:
+    _check_rate_limit(request)
+    with get_conn() as conn:
+        conn.execute("DELETE FROM sales_log WHERE id = ?", (sale_id,))
+    return SaleResponse(logged=True, id=sale_id)
+
+
+@app.get("/ledger", response_model=LedgerResponse)
+async def get_ledger(request: Request) -> LedgerResponse:
+    _check_rate_limit(request)
+    with get_conn() as conn:
+        rows = conn.execute(
+            "SELECT id, item_label, sold_price_usd, sold, created_at "
+            "FROM sales_log ORDER BY created_at DESC"
+        ).fetchall()
+    return LedgerResponse(entries=[
+        LedgerEntry(
+            id=r["id"],
+            item_label=r["item_label"],
+            sold_price_usd=r["sold_price_usd"],
+            sold=bool(r["sold"]),
+            created_at=r["created_at"],
+        )
+        for r in rows
+    ])
 
 
 @app.get("/summary", response_model=SummaryResponse)

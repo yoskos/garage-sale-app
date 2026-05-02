@@ -498,3 +498,42 @@ html, body {
   padding: 40px 0;
   font-size: .95rem;
 }
+
+/* ── Ledger list ───────────────────────────────────────────────────────── */
+.ledger-list { display: flex; flex-direction: column; gap: 6px; }
+
+.ledger-entry {
+  background: var(--white);
+  border-radius: 8px;
+  padding: 10px 14px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: .9rem;
+}
+
+.ledger-time  { color: var(--gray); font-size: .8rem; flex-shrink: 0; width: 44px; }
+.ledger-label { flex: 1; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ledger-price { color: var(--green); font-weight: 600; flex-shrink: 0; }
+.ledger-unsold { color: var(--gray); font-weight: 400; }
+
+.ledger-actions { display: flex; gap: 2px; flex-shrink: 0; }
+.ledger-del-btn { color: var(--red) !important; }
+
+.ledger-edit-name {
+  flex: 1;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: .85rem;
+  min-width: 0;
+}
+
+.ledger-edit-price {
+  width: 68px;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: .85rem;
+  flex-shrink: 0;
+}

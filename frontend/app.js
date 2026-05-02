@@ -173,6 +173,38 @@ async function apiSummary() {
   return resp.json();
 }
 
+async function apiLedger() {
+  const body = new Uint8Array(0);
+  const { ts, sig } = await sign(cfg.secret, body);
+  const resp = await fetch(`${cfg.url}/ledger`, {
+    headers: { 'X-Timestamp': ts, 'X-Signature': sig },
+  });
+  if (!resp.ok) throw new Error(resp.statusText);
+  return resp.json(); // { entries: [...] }
+}
+
+async function apiDeleteSale(id) {
+  const body = new Uint8Array(0);
+  const { ts, sig } = await sign(cfg.secret, body);
+  const resp = await fetch(`${cfg.url}/sale/${id}`, {
+    method: 'DELETE',
+    headers: { 'X-Timestamp': ts, 'X-Signature': sig },
+  });
+  if (!resp.ok) throw new Error((await resp.json()).detail || resp.statusText);
+}
+
+async function apiUpdateSale(id, itemLabel, soldPrice) {
+  const payload = JSON.stringify({ item_label: itemLabel, sold_price_usd: soldPrice });
+  const body = new TextEncoder().encode(payload);
+  const { ts, sig } = await sign(cfg.secret, body);
+  const resp = await fetch(`${cfg.url}/sale/${id}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', 'X-Timestamp': ts, 'X-Signature': sig },
+    body,
+  });
+  if (!resp.ok) throw new Error((await resp.json()).detail || resp.statusText);
+}
+
 // ─── Navigation ───────────────────────────────────────────────────────────────
 function showView(id) {
   document.querySelectorAll('.view').forEach(v => v.classList.add('hidden'));
@@ -535,13 +567,76 @@ function initResult() {
   }
 }
 
-// ─── History view ─────────────────────────────────────────────────────────────
+// ─── History / Ledger view ────────────────────────────────────────────────────
+function renderEntryView(row, entry) {
+  const time = new Date(entry.created_at * 1000)
+    .toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  const priceText = entry.sold && entry.sold_price_usd != null
+    ? `$${entry.sold_price_usd}`
+    : 'not sold';
+
+  row.innerHTML = `
+    <span class="ledger-time"></span>
+    <span class="ledger-label"></span>
+    <span class="ledger-price${!entry.sold ? ' ledger-unsold' : ''}"></span>
+    <div class="ledger-actions">
+      <button class="link-btn small ledger-edit-btn">Edit</button>
+      <button class="link-btn small ledger-del-btn">×</button>
+    </div>`;
+  row.querySelector('.ledger-time').textContent = time;
+  row.querySelector('.ledger-label').textContent = entry.item_label;
+  row.querySelector('.ledger-price').textContent = priceText;
+
+  row.querySelector('.ledger-edit-btn').addEventListener('click', () => renderEntryEdit(row, entry));
+  row.querySelector('.ledger-del-btn').addEventListener('click', async () => {
+    if (!confirm(`Delete "${entry.item_label}"?`)) return;
+    try {
+      await apiDeleteSale(entry.id);
+      row.remove();
+    } catch (err) {
+      alert(errorMessage(err));
+    }
+  });
+}
+
+function renderEntryEdit(row, entry) {
+  row.innerHTML = `
+    <input class="ledger-edit-name" type="text" maxlength="200">
+    <input class="ledger-edit-price" type="number" min="0" step="0.5">
+    <div class="ledger-actions">
+      <button class="link-btn small ledger-save-btn">Save</button>
+      <button class="link-btn small ledger-cancel-btn">Cancel</button>
+    </div>`;
+  const nameInput  = row.querySelector('.ledger-edit-name');
+  const priceInput = row.querySelector('.ledger-edit-price');
+  nameInput.value  = entry.item_label;
+  if (entry.sold_price_usd != null) priceInput.value = entry.sold_price_usd;
+
+  row.querySelector('.ledger-save-btn').addEventListener('click', async () => {
+    const newLabel = nameInput.value.trim();
+    const newPrice = priceInput.value !== '' ? parseFloat(priceInput.value) : null;
+    if (!newLabel) { nameInput.focus(); return; }
+    try {
+      await apiUpdateSale(entry.id, newLabel, newPrice);
+      entry.item_label    = newLabel;
+      entry.sold_price_usd = newPrice;
+      renderEntryView(row, entry);
+    } catch (err) {
+      alert(errorMessage(err));
+    }
+  });
+
+  row.querySelector('.ledger-cancel-btn').addEventListener('click', () => renderEntryView(row, entry));
+  nameInput.focus();
+}
+
 async function loadHistory() {
   const content = document.getElementById('history-content');
   content.innerHTML = '<p class="history-loading">Loading…</p>';
   try {
-    const s = await apiSummary();
+    const [s, { entries }] = await Promise.all([apiSummary(), apiLedger()]);
     const discount = Math.round(s.avg_discount_vs_suggested * 100);
+
     content.innerHTML = `
       <div class="summary-card">
         <h3>Today's Summary</h3>
@@ -560,18 +655,21 @@ async function loadHistory() {
           </div>
         </div>
       </div>
-      ${s.top_items.length ? `
-        <div class="top-items">
-          <h4>Top sellers</h4>
-          ${s.top_items.map(i => `
-            <div class="top-item">
-              <span>${i.item_label}</span>
-              <span>$${i.sold_price_usd}</span>
-            </div>`).join('')}
-        </div>` : ''}
-    `;
+      ${entries.length === 0
+        ? '<p class="history-empty">No sales logged yet.</p>'
+        : '<div class="ledger-list"></div>'}`;
+
+    if (entries.length > 0) {
+      const list = content.querySelector('.ledger-list');
+      entries.forEach(entry => {
+        const row = document.createElement('div');
+        row.className = 'ledger-entry';
+        renderEntryView(row, entry);
+        list.appendChild(row);
+      });
+    }
   } catch {
-    content.innerHTML = '<p class="history-empty">Could not load summary.<br>Check your connection.</p>';
+    content.innerHTML = '<p class="history-empty">Could not load.<br>Check your connection.</p>';
   }
 }
 

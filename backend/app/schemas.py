@@ -60,3 +60,20 @@ class ParseSaleResponse(BaseModel):
 class PriceRequest(BaseModel):
     upload_ids: list[str]
     notes: str | None = None
+
+
+class LedgerEntry(BaseModel):
+    id: int
+    item_label: str
+    sold_price_usd: float | None
+    sold: bool
+    created_at: int
+
+
+class LedgerResponse(BaseModel):
+    entries: list[LedgerEntry]
+
+
+class SaleUpdateRequest(BaseModel):
+    item_label: str | None = None
+    sold_price_usd: float | None = None
