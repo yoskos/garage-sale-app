@@ -42,11 +42,6 @@
   <div id="view-capture" class="view hidden">
     <img src="/static/garage-sale-header.png" class="capture-header" alt="Yosko's Garage Sale">
 
-    <div class="icon-bar">
-      <button id="capture-settings-btn" class="icon-btn" aria-label="Settings">⚙️</button>
-      <button id="capture-history-btn" class="icon-btn" aria-label="Ledger">📒</button>
-    </div>
-
     <div class="capture-body">
       <input type="file" id="photo-input" accept="image/*" capture="environment" class="hidden">
 
@@ -85,6 +80,15 @@
           </div>
         </div>
         <p id="quick-sale-error" class="error small hidden"></p>
+      </div>
+
+      <div class="bottom-icons">
+        <button id="capture-settings-btn" class="bottom-icon-btn" aria-label="Settings">
+          <span>⚙️</span><span class="bottom-icon-label">Settings</span>
+        </button>
+        <button id="capture-history-btn" class="bottom-icon-btn" aria-label="Ledger">
+          <span>📒</span><span class="bottom-icon-label">Ledger</span>
+        </button>
       </div>
 
       <div id="capture-error" class="error-box hidden">
