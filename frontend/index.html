@@ -40,23 +40,25 @@
 
   <!-- ── Capture ───────────────────────────────────────────────────────── -->
   <div id="view-capture" class="view hidden">
-    <div class="top-bar">
-      <button id="capture-settings-btn" class="link-btn">Settings</button>
-      <span class="top-title">Garage Sale</span>
-      <button id="capture-history-btn" class="link-btn">Ledger</button>
+    <div class="capture-hero">
+      <img src="/static/garage-sale-header.png" class="capture-header" alt="Yosko's Garage Sale">
+      <div class="hero-bar">
+        <button id="capture-settings-btn" class="icon-btn" aria-label="Settings">⚙️</button>
+        <button id="capture-history-btn" class="icon-btn" aria-label="Ledger">📒</button>
+      </div>
     </div>
-
-    <img src="/static/garage-sale-header.png" class="capture-header" alt="Yosko's Garage Sale">
 
     <div class="capture-body">
       <input type="file" id="photo-input" accept="image/*" capture="environment" class="hidden">
 
-      <button id="shutter-btn" class="shutter-btn">
-        <span class="shutter-icon">📷</span>
-        <span class="shutter-label">Take Photo</span>
-      </button>
-
-      <button id="quick-sale-btn" class="btn secondary">Register Sale</button>
+      <div class="action-row">
+        <button id="shutter-btn" class="action-circle" aria-label="Take photo">
+          <span class="action-icon">📷</span>
+        </button>
+        <button id="quick-sale-btn" class="action-circle" aria-label="Record sale">
+          <span class="action-icon">🎙️</span>
+        </button>
+      </div>
 
       <div id="quick-sale-section" class="quick-sale hidden">
         <div id="quick-sale-input">

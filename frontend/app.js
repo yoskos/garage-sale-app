@@ -255,8 +255,6 @@ function updateCaptureUI() {
   const notesRow   = document.getElementById('notes-row');
   const priceBtn   = document.getElementById('get-price-btn');
 
-  shutterBtn.querySelector('.shutter-label').textContent =
-    count === 0 ? 'Take Photo' : `Add photo (${count}/3)`;
   shutterBtn.disabled = count >= 3;
   strip.classList.toggle('hidden', count === 0);
   notesRow.classList.toggle('hidden', count === 0);
