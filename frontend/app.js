@@ -568,66 +568,69 @@ function initResult() {
 }
 
 // ─── History / Ledger view ────────────────────────────────────────────────────
+let _modalEntry = null;
+let _modalRow   = null;
+
 function renderEntryView(row, entry) {
   const time = new Date(entry.created_at * 1000)
     .toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-  const priceText = entry.sold && entry.sold_price_usd != null
-    ? `$${entry.sold_price_usd}`
-    : 'not sold';
-
   row.innerHTML = `
     <span class="ledger-time"></span>
     <span class="ledger-label"></span>
-    <span class="ledger-price${!entry.sold ? ' ledger-unsold' : ''}"></span>
-    <div class="ledger-actions">
-      <button class="link-btn small ledger-edit-btn">Edit</button>
-      <button class="link-btn small ledger-del-btn">×</button>
-    </div>`;
-  row.querySelector('.ledger-time').textContent = time;
+    <span class="ledger-price"></span>`;
+  row.querySelector('.ledger-time').textContent  = time;
   row.querySelector('.ledger-label').textContent = entry.item_label;
-  row.querySelector('.ledger-price').textContent = priceText;
-
-  row.querySelector('.ledger-edit-btn').addEventListener('click', () => renderEntryEdit(row, entry));
-  row.querySelector('.ledger-del-btn').addEventListener('click', async () => {
-    if (!confirm(`Delete "${entry.item_label}"?`)) return;
-    try {
-      await apiDeleteSale(entry.id);
-      row.remove();
-    } catch (err) {
-      alert(errorMessage(err));
-    }
-  });
+  row.querySelector('.ledger-price').textContent = `$${entry.sold_price_usd ?? '—'}`;
+  row.onclick = () => openModal(entry, row);
 }
 
-function renderEntryEdit(row, entry) {
-  row.innerHTML = `
-    <input class="ledger-edit-name" type="text" maxlength="200">
-    <input class="ledger-edit-price" type="number" min="0" step="0.5">
-    <div class="ledger-actions">
-      <button class="link-btn small ledger-save-btn">Save</button>
-      <button class="link-btn small ledger-cancel-btn">Cancel</button>
-    </div>`;
-  const nameInput  = row.querySelector('.ledger-edit-name');
-  const priceInput = row.querySelector('.ledger-edit-price');
-  nameInput.value  = entry.item_label;
-  if (entry.sold_price_usd != null) priceInput.value = entry.sold_price_usd;
+function openModal(entry, row) {
+  _modalEntry = entry;
+  _modalRow   = row;
+  document.getElementById('modal-time').textContent  = new Date(entry.created_at * 1000).toLocaleString();
+  document.getElementById('modal-item').textContent  = entry.item_label;
+  document.getElementById('modal-price').textContent = `$${entry.sold_price_usd ?? '—'}`;
+  document.getElementById('modal-view-actions').classList.remove('hidden');
+  document.getElementById('modal-edit-form').classList.add('hidden');
+  document.getElementById('modal-error').classList.add('hidden');
+  document.getElementById('ledger-modal').classList.remove('hidden');
+}
 
-  row.querySelector('.ledger-save-btn').addEventListener('click', async () => {
-    const newLabel = nameInput.value.trim();
-    const newPrice = priceInput.value !== '' ? parseFloat(priceInput.value) : null;
-    if (!newLabel) { nameInput.focus(); return; }
-    try {
-      await apiUpdateSale(entry.id, newLabel, newPrice);
-      entry.item_label    = newLabel;
-      entry.sold_price_usd = newPrice;
-      renderEntryView(row, entry);
-    } catch (err) {
-      alert(errorMessage(err));
-    }
-  });
+function closeModal() {
+  document.getElementById('ledger-modal').classList.add('hidden');
+  _modalEntry = null;
+  _modalRow   = null;
+}
 
-  row.querySelector('.ledger-cancel-btn').addEventListener('click', () => renderEntryView(row, entry));
-  nameInput.focus();
+async function refreshSummary() {
+  try {
+    const s = await apiSummary();
+    const discount = Math.round(s.avg_discount_vs_suggested * 100);
+    const vals = document.querySelectorAll('#history-content .stat-value');
+    if (vals[0]) vals[0].textContent = `${s.total_items_sold}/${s.total_items_priced}`;
+    if (vals[1]) vals[1].textContent = `$${s.total_revenue_usd.toFixed(0)}`;
+    if (vals[2]) vals[2].textContent = `${discount}%`;
+  } catch { /* silent */ }
+}
+
+async function downloadCsv() {
+  try {
+    const { entries } = await apiLedger();
+    const rows = entries.filter(e => e.sold).map(e => {
+      const time = new Date(e.created_at * 1000).toLocaleString();
+      const item = `"${e.item_label.replace(/"/g, '""')}"`;
+      return `${time},${item},${e.sold_price_usd ?? ''}`;
+    });
+    const csv = ['Time,Item,Price ($)', ...rows].join('\n');
+    const a = Object.assign(document.createElement('a'), {
+      href: URL.createObjectURL(new Blob([csv], { type: 'text/csv' })),
+      download: 'garage-sale.csv',
+    });
+    a.click();
+    URL.revokeObjectURL(a.href);
+  } catch (err) {
+    alert(errorMessage(err));
+  }
 }
 
 async function loadHistory() {
@@ -636,6 +639,7 @@ async function loadHistory() {
   try {
     const [s, { entries }] = await Promise.all([apiSummary(), apiLedger()]);
     const discount = Math.round(s.avg_discount_vs_suggested * 100);
+    const sold = entries.filter(e => e.sold);
 
     content.innerHTML = `
       <div class="summary-card">
@@ -655,13 +659,13 @@ async function loadHistory() {
           </div>
         </div>
       </div>
-      ${entries.length === 0
-        ? '<p class="history-empty">No sales logged yet.</p>'
+      ${sold.length === 0
+        ? '<p class="history-empty">No sold items yet.</p>'
         : '<div class="ledger-list"></div>'}`;
 
-    if (entries.length > 0) {
+    if (sold.length > 0) {
       const list = content.querySelector('.ledger-list');
-      entries.forEach(entry => {
+      sold.forEach(entry => {
         const row = document.createElement('div');
         row.className = 'ledger-entry';
         renderEntryView(row, entry);
@@ -676,6 +680,66 @@ async function loadHistory() {
 function initHistory() {
   document.getElementById('history-back-btn').addEventListener('click', () => showView('view-capture'));
   document.getElementById('history-refresh-btn').addEventListener('click', loadHistory);
+  document.getElementById('ledger-download-btn').addEventListener('click', downloadCsv);
+
+  const backdrop = document.getElementById('ledger-modal');
+  backdrop.addEventListener('click', e => { if (e.target === backdrop) closeModal(); });
+  document.getElementById('modal-close-btn').addEventListener('click', closeModal);
+
+  document.getElementById('modal-edit-btn').addEventListener('click', () => {
+    document.getElementById('modal-edit-name').value  = _modalEntry.item_label;
+    document.getElementById('modal-edit-price').value = _modalEntry.sold_price_usd ?? '';
+    document.getElementById('modal-view-actions').classList.add('hidden');
+    document.getElementById('modal-edit-form').classList.remove('hidden');
+    document.getElementById('modal-error').classList.add('hidden');
+    document.getElementById('modal-edit-name').focus();
+  });
+
+  document.getElementById('modal-cancel-edit-btn').addEventListener('click', () => {
+    document.getElementById('modal-edit-form').classList.add('hidden');
+    document.getElementById('modal-view-actions').classList.remove('hidden');
+    document.getElementById('modal-error').classList.add('hidden');
+  });
+
+  document.getElementById('modal-save-btn').addEventListener('click', async () => {
+    const newLabel = document.getElementById('modal-edit-name').value.trim();
+    const priceVal = document.getElementById('modal-edit-price').value;
+    const newPrice = priceVal !== '' ? parseFloat(priceVal) : null;
+    if (!newLabel) { document.getElementById('modal-edit-name').focus(); return; }
+    const saveBtn = document.getElementById('modal-save-btn');
+    saveBtn.disabled = true;
+    document.getElementById('modal-error').classList.add('hidden');
+    try {
+      await apiUpdateSale(_modalEntry.id, newLabel, newPrice);
+      _modalEntry.item_label     = newLabel;
+      _modalEntry.sold_price_usd = newPrice;
+      renderEntryView(_modalRow, _modalEntry);
+      await refreshSummary();
+      closeModal();
+    } catch (err) {
+      document.getElementById('modal-error').textContent = errorMessage(err);
+      document.getElementById('modal-error').classList.remove('hidden');
+    } finally {
+      saveBtn.disabled = false;
+    }
+  });
+
+  document.getElementById('modal-del-btn').addEventListener('click', async () => {
+    if (!confirm(`Delete "${_modalEntry.item_label}"?`)) return;
+    const delBtn = document.getElementById('modal-del-btn');
+    delBtn.disabled = true;
+    document.getElementById('modal-error').classList.add('hidden');
+    try {
+      await apiDeleteSale(_modalEntry.id);
+      _modalRow.remove();
+      await refreshSummary();
+      closeModal();
+    } catch (err) {
+      document.getElementById('modal-error').textContent = errorMessage(err);
+      document.getElementById('modal-error').classList.remove('hidden');
+      delBtn.disabled = false;
+    }
+  });
 }
 
 // ─── Quick Sale ───────────────────────────────────────────────────────────────

@@ -510,30 +510,80 @@ html, body {
   align-items: center;
   gap: 8px;
   font-size: .9rem;
+  cursor: pointer;
+  transition: background .12s;
 }
+
+.ledger-entry:active { background: #f0f4ff; }
 
 .ledger-time  { color: var(--gray); font-size: .8rem; flex-shrink: 0; width: 44px; }
 .ledger-label { flex: 1; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ledger-price { color: var(--green); font-weight: 600; flex-shrink: 0; }
-.ledger-unsold { color: var(--gray); font-weight: 400; }
 
-.ledger-actions { display: flex; gap: 2px; flex-shrink: 0; }
-.ledger-del-btn { color: var(--red) !important; }
+.top-bar-right { display: flex; gap: 8px; align-items: center; }
+
+/* ── Ledger modal ──────────────────────────────────────────────────────── */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 200;
+  padding: 16px;
+}
+
+.modal {
+  background: var(--white);
+  border-radius: var(--radius);
+  padding: 24px;
+  width: 100%;
+  max-width: 400px;
+  box-shadow: 0 8px 32px rgba(0,0,0,.25);
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.modal-close {
+  position: absolute;
+  top: 10px;
+  right: 12px;
+  background: none;
+  border: none;
+  font-size: 1.5rem;
+  cursor: pointer;
+  color: var(--gray);
+  line-height: 1;
+  padding: 0;
+}
+
+.modal-time  { font-size: .8rem; color: var(--gray); }
+.modal-item  { font-size: 1.15rem; font-weight: 600; line-height: 1.3; }
+.modal-price { font-size: 2rem; font-weight: 700; color: var(--blue); }
+
+.modal-btns { display: flex; gap: 10px; }
+.modal-btns .btn { flex: 1; }
+.modal-del-btn { color: var(--red) !important; border-color: #fca5a5 !important; }
+
+.modal-edit-form { display: flex; flex-direction: column; gap: 10px; }
 
 .ledger-edit-name {
-  flex: 1;
-  padding: 6px 8px;
+  width: 100%;
+  padding: 10px 12px;
   border: 1px solid var(--border);
-  border-radius: 6px;
-  font-size: .85rem;
-  min-width: 0;
+  border-radius: 8px;
+  font-size: 1rem;
+  background: var(--white);
 }
 
 .ledger-edit-price {
-  width: 68px;
-  padding: 6px 8px;
+  width: 100%;
+  padding: 10px 12px;
   border: 1px solid var(--border);
-  border-radius: 6px;
-  font-size: .85rem;
-  flex-shrink: 0;
+  border-radius: 8px;
+  font-size: 1rem;
+  background: var(--white);
 }

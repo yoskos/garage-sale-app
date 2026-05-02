@@ -167,9 +167,35 @@
     <div class="top-bar">
       <button id="history-back-btn" class="link-btn">← Back</button>
       <span class="top-title">Ledger</span>
-      <button id="history-refresh-btn" class="link-btn">Refresh</button>
+      <div class="top-bar-right">
+        <button id="history-refresh-btn" class="link-btn">Refresh</button>
+        <button id="ledger-download-btn" class="link-btn">⬇ CSV</button>
+      </div>
     </div>
     <div id="history-content" class="view-inner"></div>
+  </div>
+
+  <!-- ── Ledger modal ──────────────────────────────────────────────────── -->
+  <div id="ledger-modal" class="modal-backdrop hidden">
+    <div class="modal">
+      <button id="modal-close-btn" class="modal-close">×</button>
+      <p id="modal-time" class="modal-time"></p>
+      <h3 id="modal-item" class="modal-item"></h3>
+      <p id="modal-price" class="modal-price"></p>
+      <div id="modal-view-actions" class="modal-btns">
+        <button id="modal-edit-btn" class="btn secondary">Edit</button>
+        <button id="modal-del-btn" class="btn secondary modal-del-btn">Delete</button>
+      </div>
+      <div id="modal-edit-form" class="modal-edit-form hidden">
+        <input id="modal-edit-name" type="text" class="ledger-edit-name" maxlength="200">
+        <input id="modal-edit-price" type="number" class="ledger-edit-price" min="0" step="0.5">
+        <div class="modal-btns">
+          <button id="modal-save-btn" class="btn primary">Save</button>
+          <button id="modal-cancel-edit-btn" class="btn secondary">Cancel</button>
+        </div>
+      </div>
+      <p id="modal-error" class="error small hidden"></p>
+    </div>
   </div>
 
   <script src="/static/app.js" type="module"></script>
