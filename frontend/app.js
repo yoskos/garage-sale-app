@@ -747,6 +747,8 @@ function initQuickSale() {
 
   let parsed = null;
   let recognition = null;
+  let fromAudio = false;
+  let autoLogTimer = null;
 
   const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
   if (!SpeechRecognition) micBtn.classList.add('hidden');
@@ -755,9 +757,15 @@ function initQuickSale() {
     logBtn.classList.toggle('hidden', !textarea.value.trim());
   }
 
+  function clearAutoLog() {
+    if (autoLogTimer) { clearInterval(autoLogTimer); autoLogTimer = null; }
+  }
+
   function reset() {
+    clearAutoLog();
     if (recognition) { recognition.abort(); recognition = null; }
     micBtn.classList.remove('recording');
+    fromAudio = false;
     inputArea.classList.remove('hidden');
     confirmDiv.classList.add('hidden');
     errorEl.classList.add('hidden');
@@ -780,6 +788,7 @@ function initQuickSale() {
       priceEl.textContent = parsed.sold_price_usd > 0 ? `$${parsed.sold_price_usd}` : '—';
       inputArea.classList.add('hidden');
       confirmDiv.classList.remove('hidden');
+      if (fromAudio) startAutoLog();
     } catch (err) {
       errorEl.textContent = errorMessage(err);
       errorEl.classList.remove('hidden');
@@ -789,8 +798,22 @@ function initQuickSale() {
     }
   }
 
+  function startAutoLog() {
+    let secs = 3;
+    confirmBtn.textContent = `Confirm (${secs})`;
+    autoLogTimer = setInterval(() => {
+      secs--;
+      if (secs <= 0) {
+        clearAutoLog();
+        confirmBtn.click();
+      } else {
+        confirmBtn.textContent = `Confirm (${secs})`;
+      }
+    }, 1000);
+  }
+
   textarea.addEventListener('input', updateLogBtn);
-  logBtn.addEventListener('click', doAnalyze);
+  logBtn.addEventListener('click', () => { fromAudio = false; doAnalyze(); });
 
   if (SpeechRecognition) {
     micBtn.addEventListener('click', () => {
@@ -812,7 +835,7 @@ function initQuickSale() {
       recognition.onend = () => {
         recognition = null;
         micBtn.classList.remove('recording');
-        if (textarea.value.trim()) doAnalyze();
+        if (textarea.value.trim()) { fromAudio = true; doAnalyze(); }
       };
 
       recognition.onerror = (event) => {
@@ -832,6 +855,8 @@ function initQuickSale() {
   }
 
   editBtn.addEventListener('click', () => {
+    clearAutoLog();
+    fromAudio = false;
     confirmDiv.classList.add('hidden');
     inputArea.classList.remove('hidden');
     updateLogBtn();
