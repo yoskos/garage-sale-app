@@ -306,10 +306,12 @@ function initCapture() {
       const item = { blob, resolvedId: null, pendingUpload: null, failed: false };
       capturedItems.push(item);
       startUpload(item); // fire-and-forget background upload
-      updateCaptureUI();
     } catch {
       showCaptureError('Failed to process image — try again.');
-      shutterBtn.disabled = capturedItems.length >= 3;
+    } finally {
+      // Double rAF: iOS Safari defers DOM repaints after returning from camera
+      // until the next user interaction. Two animation frames force a flush.
+      requestAnimationFrame(() => requestAnimationFrame(updateCaptureUI));
     }
   });
 
@@ -398,6 +400,7 @@ function initResult() {
   const soldBtn    = document.getElementById('sold-btn');
   const notSoldBtn = document.getElementById('not-sold-btn');
   const reshootBtn = document.getElementById('reshoot-btn');
+  const refineBtn  = document.getElementById('refine-btn');
   const soldForm   = document.getElementById('sold-form');
   const actions    = document.getElementById('result-actions');
   const confirmBtn = document.getElementById('sold-confirm-btn');
@@ -414,6 +417,25 @@ function initResult() {
   cancelBtn.addEventListener('click', () => {
     soldForm.classList.add('hidden');
     actions.classList.remove('hidden');
+  });
+
+  refineBtn.addEventListener('click', () => {
+    // Keep photos, but server files were deleted after /price — force fresh uploads.
+    capturedItems.forEach(item => {
+      item.resolvedId = null;
+      item.pendingUpload = null;
+      item.failed = false;
+      startUpload(item);
+    });
+    updateCaptureUI();
+    showView('view-capture');
+    // Expand notes input so the user can type immediately.
+    const notesInput  = document.getElementById('notes-input');
+    const notesToggle = document.getElementById('notes-toggle');
+    notesInput.classList.remove('hidden');
+    notesToggle.textContent = '－ Notes';
+    notesInput.value = lastNotes;
+    setTimeout(() => notesInput.focus(), 80);
   });
 
   reshootBtn.addEventListener('click', () => {
