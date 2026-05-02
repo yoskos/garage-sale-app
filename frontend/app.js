@@ -582,22 +582,36 @@ function initHistory() {
 
 // ─── Quick Sale ───────────────────────────────────────────────────────────────
 function initQuickSale() {
-  const quickSaleBtn     = document.getElementById('quick-sale-btn');
-  const section          = document.getElementById('quick-sale-section');
-  const inputDiv         = document.getElementById('quick-sale-input');
-  const confirmDiv       = document.getElementById('quick-sale-confirm');
-  const textarea         = document.getElementById('quick-sale-text');
-  const analyzeBtn       = document.getElementById('quick-sale-analyze-btn');
-  const cancelBtn        = document.getElementById('quick-sale-cancel-btn');
-  const itemEl           = document.getElementById('quick-sale-item');
-  const priceEl          = document.getElementById('quick-sale-price');
-  const confirmBtn       = document.getElementById('quick-sale-confirm-btn');
-  const editBtn          = document.getElementById('quick-sale-edit-btn');
-  const errorEl          = document.getElementById('quick-sale-error');
+  const quickSaleBtn = document.getElementById('quick-sale-btn');
+  const section      = document.getElementById('quick-sale-section');
+  const inputDiv     = document.getElementById('quick-sale-input');
+  const confirmDiv   = document.getElementById('quick-sale-confirm');
+  const textarea     = document.getElementById('quick-sale-text');
+  const analyzeBtn   = document.getElementById('quick-sale-analyze-btn');
+  const cancelBtn    = document.getElementById('quick-sale-cancel-btn');
+  const micBtn       = document.getElementById('quick-sale-mic-btn');
+  const micLabel     = micBtn.querySelector('.mic-label');
+  const itemEl       = document.getElementById('quick-sale-item');
+  const priceEl      = document.getElementById('quick-sale-price');
+  const confirmBtn   = document.getElementById('quick-sale-confirm-btn');
+  const editBtn      = document.getElementById('quick-sale-edit-btn');
+  const errorEl      = document.getElementById('quick-sale-error');
 
-  let parsed = null; // { item_label, sold_price_usd }
+  let parsed = null;
+  let recognition = null;
+
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SpeechRecognition) micBtn.classList.add('hidden');
+
+  function setInputBusy(busy) {
+    analyzeBtn.disabled = cancelBtn.disabled = micBtn.disabled = busy;
+    analyzeBtn.textContent = busy ? 'Analyzing…' : 'Analyze';
+  }
 
   function reset() {
+    if (recognition) { recognition.abort(); recognition = null; }
+    micBtn.classList.remove('recording');
+    micLabel.textContent = 'Tap to speak';
     section.classList.add('hidden');
     inputDiv.classList.remove('hidden');
     confirmDiv.classList.add('hidden');
@@ -606,19 +620,15 @@ function initQuickSale() {
     parsed = null;
   }
 
-  quickSaleBtn.addEventListener('click', () => {
-    section.classList.remove('hidden');
-    textarea.focus();
-  });
-
-  cancelBtn.addEventListener('click', reset);
-
-  analyzeBtn.addEventListener('click', async () => {
+  async function doAnalyze() {
     const text = textarea.value.trim();
-    if (!text) { errorEl.textContent = 'Describe the sale first.'; errorEl.classList.remove('hidden'); return; }
+    if (!text) {
+      errorEl.textContent = 'Describe the sale first.';
+      errorEl.classList.remove('hidden');
+      return;
+    }
     errorEl.classList.add('hidden');
-    analyzeBtn.disabled = cancelBtn.disabled = true;
-    analyzeBtn.textContent = 'Analyzing…';
+    setInputBusy(true);
     try {
       parsed = await apiParseSale(text);
       itemEl.textContent = parsed.item_label;
@@ -629,10 +639,54 @@ function initQuickSale() {
       errorEl.textContent = errorMessage(err);
       errorEl.classList.remove('hidden');
     } finally {
-      analyzeBtn.disabled = cancelBtn.disabled = false;
-      analyzeBtn.textContent = 'Analyze';
+      setInputBusy(false);
     }
-  });
+  }
+
+  quickSaleBtn.addEventListener('click', () => section.classList.remove('hidden'));
+  cancelBtn.addEventListener('click', reset);
+  analyzeBtn.addEventListener('click', doAnalyze);
+
+  if (SpeechRecognition) {
+    micBtn.addEventListener('click', () => {
+      if (recognition) { recognition.stop(); return; }
+
+      errorEl.classList.add('hidden');
+      recognition = new SpeechRecognition();
+      recognition.lang = 'en-US';
+      recognition.interimResults = true;
+      recognition.continuous = false;
+
+      micLabel.textContent = 'Tap to stop';
+      micBtn.classList.add('recording');
+
+      recognition.onresult = (event) => {
+        textarea.value = Array.from(event.results).map(r => r[0].transcript).join('');
+      };
+
+      recognition.onend = () => {
+        recognition = null;
+        micBtn.classList.remove('recording');
+        micLabel.textContent = 'Tap to speak';
+        if (textarea.value.trim()) doAnalyze();
+      };
+
+      recognition.onerror = (event) => {
+        recognition = null;
+        micBtn.classList.remove('recording');
+        micLabel.textContent = 'Tap to speak';
+        if (event.error === 'not-allowed') {
+          errorEl.textContent = 'Microphone permission denied';
+          errorEl.classList.remove('hidden');
+        } else if (event.error !== 'no-speech') {
+          errorEl.textContent = `Mic error: ${event.error}`;
+          errorEl.classList.remove('hidden');
+        }
+      };
+
+      recognition.start();
+    });
+  }
 
   editBtn.addEventListener('click', () => {
     confirmDiv.classList.add('hidden');
@@ -661,7 +715,6 @@ function initQuickSale() {
         body,
       });
       if (!resp.ok) throw new Error((await resp.json()).detail || resp.statusText);
-      // Brief success flash then reset
       confirmBtn.textContent = '✓ Logged!';
       setTimeout(reset, 800);
     } catch (err) {
