@@ -549,6 +549,39 @@ html, body {
 
 .top-bar-right { display: flex; gap: 8px; align-items: center; }
 
+.search-bar {
+  padding: 8px 16px;
+  max-width: 480px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+.search-input {
+  width: 100%;
+  padding: 10px 14px;
+  border: 1px solid var(--border);
+  border-radius: 99px;
+  font-size: .9rem;
+  background: var(--white);
+  outline: none;
+}
+
+.search-input:focus { border-color: var(--blue); }
+
+.search-hit {
+  background: var(--white);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+  box-shadow: var(--shadow);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.search-hit-item { font-weight: 600; font-size: 1rem; }
+.search-hit-price { font-size: 1.25rem; font-weight: 700; color: var(--blue); }
+.search-hit-detail { font-size: .8rem; color: var(--gray); }
+
 /* ── Ledger modal ──────────────────────────────────────────────────────── */
 .modal-backdrop {
   position: fixed;

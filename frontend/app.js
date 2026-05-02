@@ -205,6 +205,16 @@ async function apiUpdateSale(id, itemLabel, soldPrice) {
   if (!resp.ok) throw new Error((await resp.json()).detail || resp.statusText);
 }
 
+async function apiSearch(q) {
+  const body = new Uint8Array(0);
+  const { ts, sig } = await sign(cfg.secret, body);
+  const resp = await fetch(`${cfg.url}/search?q=${encodeURIComponent(q)}`, {
+    headers: { 'X-Timestamp': ts, 'X-Signature': sig },
+  });
+  if (!resp.ok) throw new Error((await resp.json()).detail || resp.statusText);
+  return resp.json(); // { results: [...] }
+}
+
 // ─── Navigation ───────────────────────────────────────────────────────────────
 function showView(id) {
   document.querySelectorAll('.view').forEach(v => v.classList.add('hidden'));
@@ -212,6 +222,12 @@ function showView(id) {
 }
 
 // ─── Error messages ───────────────────────────────────────────────────────────
+function esc(s) {
+  const d = document.createElement('div');
+  d.textContent = s;
+  return d.innerHTML;
+}
+
 function errorMessage(err) {
   const status = err.status;
   if (status === 401) return 'Bad signature — re-check Setup';
@@ -730,6 +746,56 @@ function initHistory() {
       delBtn.disabled = false;
     }
   });
+
+  // ── Search ──
+  const searchInput   = document.getElementById('search-input');
+  const searchResults = document.getElementById('search-results');
+  const historyContent = document.getElementById('history-content');
+  let searchTimer = null;
+
+  searchInput.addEventListener('input', () => {
+    clearTimeout(searchTimer);
+    const q = searchInput.value.trim();
+    if (!q) {
+      searchResults.classList.add('hidden');
+      searchResults.innerHTML = '';
+      historyContent.classList.remove('hidden');
+      return;
+    }
+    searchTimer = setTimeout(() => runSearch(q), 400);
+  });
+
+  async function runSearch(q) {
+    searchResults.innerHTML = '<p class="history-loading">Searching…</p>';
+    searchResults.classList.remove('hidden');
+    historyContent.classList.add('hidden');
+    try {
+      const { results } = await apiSearch(q);
+      if (results.length === 0) {
+        searchResults.innerHTML = '<p class="history-empty">No matches found.</p>';
+        return;
+      }
+      searchResults.innerHTML = '';
+      results.forEach(hit => {
+        const div = document.createElement('div');
+        div.className = 'search-hit';
+        const range = hit.price_range_usd?.length === 2
+          ? `$${hit.price_range_usd[0]}–$${hit.price_range_usd[1]}`
+          : '';
+        const ts = new Date(hit.created_at * 1000);
+        const time = ts.toLocaleDateString() + ' ' + ts.toLocaleTimeString();
+        div.innerHTML = `
+          <div class="search-hit-item">${esc(hit.item)}</div>
+          <div class="search-hit-price">$${hit.suggested_price_usd} <span class="muted small">${range}</span></div>
+          <div class="search-hit-detail">${esc(hit.condition_observed)}</div>
+          <div class="search-hit-detail">${esc(hit.rationale)}</div>
+          <div class="muted small">${time}</div>`;
+        searchResults.appendChild(div);
+      });
+    } catch (err) {
+      searchResults.innerHTML = `<p class="history-empty">${errorMessage(err)}</p>`;
+    }
+  }
 }
 
 // ─── Quick Sale ───────────────────────────────────────────────────────────────

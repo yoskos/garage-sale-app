@@ -77,3 +77,18 @@ class LedgerResponse(BaseModel):
 class SaleUpdateRequest(BaseModel):
     item_label: str | None = None
     sold_price_usd: float | None = None
+
+
+class SearchHit(BaseModel):
+    item: str
+    condition_observed: str
+    suggested_price_usd: float
+    price_range_usd: list[float]
+    retail_price_new_usd: float | None = None
+    rationale: str
+    notes: str
+    created_at: int
+
+
+class SearchResponse(BaseModel):
+    results: list[SearchHit]

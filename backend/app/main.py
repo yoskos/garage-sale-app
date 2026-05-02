@@ -18,7 +18,8 @@ from .schemas import (
     HealthResponse, LedgerEntry, LedgerResponse,
     ParseSaleRequest, ParseSaleResponse,
     PriceRequest, PriceResponse,
-    SaleRequest, SaleResponse, SaleUpdateRequest, SummaryResponse, UploadResponse,
+    SaleRequest, SaleResponse, SaleUpdateRequest,
+    SearchHit, SearchResponse, SummaryResponse, UploadResponse,
 )
 from .settings import settings
 
@@ -218,6 +219,35 @@ async def get_ledger(request: Request) -> LedgerResponse:
         )
         for r in rows
     ])
+
+
+@app.get("/search", response_model=SearchResponse)
+async def search_items(request: Request, q: str = "") -> SearchResponse:
+    _check_rate_limit(request)
+    q = q.strip()
+    if not q:
+        raise HTTPException(status_code=400, detail="Query is required")
+    with get_conn() as conn:
+        rows = conn.execute(
+            "SELECT response_json, notes, created_at FROM price_cache "
+            "WHERE response_json LIKE ? ORDER BY created_at DESC LIMIT 50",
+            (f"%{q}%",),
+        ).fetchall()
+    import json
+    results: list[SearchHit] = []
+    for r in rows:
+        data = json.loads(r["response_json"])
+        results.append(SearchHit(
+            item=data.get("item", ""),
+            condition_observed=data.get("condition_observed", ""),
+            suggested_price_usd=data.get("suggested_price_usd", 0),
+            price_range_usd=data.get("price_range_usd", []),
+            retail_price_new_usd=data.get("retail_price_new_usd"),
+            rationale=data.get("rationale", ""),
+            notes=r["notes"],
+            created_at=r["created_at"],
+        ))
+    return SearchResponse(results=results)
 
 
 @app.get("/summary", response_model=SummaryResponse)
