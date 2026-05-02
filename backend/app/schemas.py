@@ -7,6 +7,7 @@ class PriceResponse(BaseModel):
     condition_observed: str
     suggested_price_usd: float
     price_range_usd: list[float]
+    retail_price_new_usd: float | None = None
     rationale: str
     cache_hit: bool
     request_id: str

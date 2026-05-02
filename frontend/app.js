@@ -393,6 +393,13 @@ function showResult() {
   document.getElementById('result-price').textContent = `$${r.suggested_price_usd}`;
   document.getElementById('result-range').textContent =
     `Range $${r.price_range_usd[0]} – $${r.price_range_usd[1]}`;
+  const retailEl = document.getElementById('result-retail');
+  if (r.retail_price_new_usd != null) {
+    retailEl.textContent = `Est. retail new: $${r.retail_price_new_usd}`;
+    retailEl.classList.remove('hidden');
+  } else {
+    retailEl.classList.add('hidden');
+  }
   document.getElementById('result-condition').textContent = r.condition_observed;
   document.getElementById('result-rationale').textContent = r.rationale;
 

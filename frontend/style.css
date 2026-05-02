@@ -329,9 +329,10 @@ html, body {
   gap: 8px;
 }
 
-.result-item  { font-size: 1.15rem; font-weight: 600; line-height: 1.3; }
-.result-price { font-size: 2.5rem; font-weight: 700; color: var(--blue); }
-.result-range { font-size: .95rem; color: var(--gray); }
+.result-item   { font-size: 1.15rem; font-weight: 600; line-height: 1.3; }
+.result-price  { font-size: 2.5rem; font-weight: 700; color: var(--blue); }
+.result-range  { font-size: .95rem; color: var(--gray); }
+.result-retail { font-size: .85rem; color: var(--gray); }
 
 .divider { border: none; border-top: 1px solid var(--border); margin: 4px 0; }
 

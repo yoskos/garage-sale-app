@@ -129,6 +129,7 @@ async def price_item(request: Request, body: PriceRequest) -> PriceResponse:
         condition_observed=result["condition_observed"],
         suggested_price_usd=result["suggested_price_usd"],
         price_range_usd=result["price_range_usd"],
+        retail_price_new_usd=result.get("retail_price_new_usd"),
         rationale=result["rationale"],
     )
 
