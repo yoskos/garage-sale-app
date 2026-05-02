@@ -252,12 +252,10 @@ function updateCaptureUI() {
   const count      = capturedItems.length;
   const shutterBtn = document.getElementById('shutter-btn');
   const strip      = document.getElementById('photo-strip');
-  const notesRow   = document.getElementById('notes-row');
   const priceBtn   = document.getElementById('get-price-btn');
 
   shutterBtn.disabled = count >= 3;
   strip.classList.toggle('hidden', count === 0);
-  notesRow.classList.toggle('hidden', count === 0);
   priceBtn.classList.toggle('hidden', count === 0);
 
   strip.innerHTML = '';
@@ -342,7 +340,7 @@ function initCapture() {
 
   notesToggle.addEventListener('click', () => {
     const hidden = notesInput.classList.toggle('hidden');
-    notesToggle.textContent = hidden ? '＋ Add notes' : '－ Notes';
+    notesToggle.textContent = hidden ? '+ Add notes' : '− Notes';
     if (!hidden) notesInput.focus();
   });
 
@@ -736,20 +734,16 @@ function initHistory() {
 
 // ─── Quick Sale ───────────────────────────────────────────────────────────────
 function initQuickSale() {
-  const quickSaleBtn = document.getElementById('quick-sale-btn');
-  const section      = document.getElementById('quick-sale-section');
-  const inputDiv     = document.getElementById('quick-sale-input');
-  const confirmDiv   = document.getElementById('quick-sale-confirm');
-  const textarea     = document.getElementById('quick-sale-text');
-  const analyzeBtn   = document.getElementById('quick-sale-analyze-btn');
-  const cancelBtn    = document.getElementById('quick-sale-cancel-btn');
-  const micBtn       = document.getElementById('quick-sale-mic-btn');
-  const micLabel     = micBtn.querySelector('.mic-label');
-  const itemEl       = document.getElementById('quick-sale-item');
-  const priceEl      = document.getElementById('quick-sale-price');
-  const confirmBtn   = document.getElementById('quick-sale-confirm-btn');
-  const editBtn      = document.getElementById('quick-sale-edit-btn');
-  const errorEl      = document.getElementById('quick-sale-error');
+  const inputArea  = document.getElementById('sale-input-area');
+  const confirmDiv = document.getElementById('quick-sale-confirm');
+  const textarea   = document.getElementById('quick-sale-text');
+  const logBtn     = document.getElementById('quick-sale-analyze-btn');
+  const micBtn     = document.getElementById('quick-sale-mic-btn');
+  const itemEl     = document.getElementById('quick-sale-item');
+  const priceEl    = document.getElementById('quick-sale-price');
+  const confirmBtn = document.getElementById('quick-sale-confirm-btn');
+  const editBtn    = document.getElementById('quick-sale-edit-btn');
+  const errorEl    = document.getElementById('quick-sale-error');
 
   let parsed = null;
   let recognition = null;
@@ -757,49 +751,46 @@ function initQuickSale() {
   const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
   if (!SpeechRecognition) micBtn.classList.add('hidden');
 
-  function setInputBusy(busy) {
-    analyzeBtn.disabled = cancelBtn.disabled = micBtn.disabled = busy;
-    analyzeBtn.textContent = busy ? 'Analyzing…' : 'Analyze';
+  function updateLogBtn() {
+    logBtn.classList.toggle('hidden', !textarea.value.trim());
   }
 
   function reset() {
     if (recognition) { recognition.abort(); recognition = null; }
     micBtn.classList.remove('recording');
-    micLabel.textContent = 'Tap to speak';
-    section.classList.add('hidden');
-    inputDiv.classList.remove('hidden');
+    inputArea.classList.remove('hidden');
     confirmDiv.classList.add('hidden');
     errorEl.classList.add('hidden');
+    logBtn.classList.add('hidden');
     textarea.value = '';
     parsed = null;
+    confirmBtn.disabled = editBtn.disabled = false;
+    confirmBtn.textContent = 'Confirm Sale';
   }
 
   async function doAnalyze() {
     const text = textarea.value.trim();
-    if (!text) {
-      errorEl.textContent = 'Describe the sale first.';
-      errorEl.classList.remove('hidden');
-      return;
-    }
+    if (!text) return;
     errorEl.classList.add('hidden');
-    setInputBusy(true);
+    logBtn.disabled = micBtn.disabled = true;
+    logBtn.textContent = 'Analyzing…';
     try {
       parsed = await apiParseSale(text);
       itemEl.textContent = parsed.item_label;
       priceEl.textContent = parsed.sold_price_usd > 0 ? `$${parsed.sold_price_usd}` : '—';
-      inputDiv.classList.add('hidden');
+      inputArea.classList.add('hidden');
       confirmDiv.classList.remove('hidden');
     } catch (err) {
       errorEl.textContent = errorMessage(err);
       errorEl.classList.remove('hidden');
     } finally {
-      setInputBusy(false);
+      logBtn.disabled = micBtn.disabled = false;
+      logBtn.textContent = 'Log Sale';
     }
   }
 
-  quickSaleBtn.addEventListener('click', () => section.classList.remove('hidden'));
-  cancelBtn.addEventListener('click', reset);
-  analyzeBtn.addEventListener('click', doAnalyze);
+  textarea.addEventListener('input', updateLogBtn);
+  logBtn.addEventListener('click', doAnalyze);
 
   if (SpeechRecognition) {
     micBtn.addEventListener('click', () => {
@@ -811,24 +802,22 @@ function initQuickSale() {
       recognition.interimResults = true;
       recognition.continuous = false;
 
-      micLabel.textContent = 'Tap to stop';
       micBtn.classList.add('recording');
 
       recognition.onresult = (event) => {
         textarea.value = Array.from(event.results).map(r => r[0].transcript).join('');
+        updateLogBtn();
       };
 
       recognition.onend = () => {
         recognition = null;
         micBtn.classList.remove('recording');
-        micLabel.textContent = 'Tap to speak';
         if (textarea.value.trim()) doAnalyze();
       };
 
       recognition.onerror = (event) => {
         recognition = null;
         micBtn.classList.remove('recording');
-        micLabel.textContent = 'Tap to speak';
         if (event.error === 'not-allowed') {
           errorEl.textContent = 'Microphone permission denied';
           errorEl.classList.remove('hidden');
@@ -844,7 +833,8 @@ function initQuickSale() {
 
   editBtn.addEventListener('click', () => {
     confirmDiv.classList.add('hidden');
-    inputDiv.classList.remove('hidden');
+    inputArea.classList.remove('hidden');
+    updateLogBtn();
   });
 
   confirmBtn.addEventListener('click', async () => {

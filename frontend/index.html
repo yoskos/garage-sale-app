@@ -40,39 +40,39 @@
 
   <!-- ── Capture ───────────────────────────────────────────────────────── -->
   <div id="view-capture" class="view hidden">
-    <div class="capture-hero">
-      <img src="/static/garage-sale-header.png" class="capture-header" alt="Yosko's Garage Sale">
-      <div class="hero-bar">
-        <button id="capture-settings-btn" class="icon-btn" aria-label="Settings">⚙️</button>
-        <button id="capture-history-btn" class="icon-btn" aria-label="Ledger">📒</button>
-      </div>
+    <img src="/static/garage-sale-header.png" class="capture-header" alt="Yosko's Garage Sale">
+
+    <div class="icon-bar">
+      <button id="capture-settings-btn" class="icon-btn" aria-label="Settings">⚙️</button>
+      <button id="capture-history-btn" class="icon-btn" aria-label="Ledger">📒</button>
     </div>
 
     <div class="capture-body">
       <input type="file" id="photo-input" accept="image/*" capture="environment" class="hidden">
 
-      <div class="action-row">
-        <button id="shutter-btn" class="action-circle" aria-label="Take photo">
-          <span class="action-icon">📷</span>
-        </button>
-        <button id="quick-sale-btn" class="action-circle" aria-label="Record sale">
-          <span class="action-icon">🎙️</span>
-        </button>
+      <div class="capture-section">
+        <h3 class="section-title">Get Price</h3>
+        <div class="section-row">
+          <button id="shutter-btn" class="action-circle" aria-label="Take photo">
+            <span class="action-icon">📷</span>
+          </button>
+          <button id="notes-toggle" class="link-btn">+ Add notes</button>
+        </div>
+        <div id="photo-strip" class="photo-strip hidden"></div>
+        <input type="text" id="notes-input" class="notes-input hidden"
+               placeholder="e.g. works, missing remote" maxlength="200">
+        <button id="get-price-btn" class="btn primary hidden">Get Price</button>
       </div>
 
-      <div id="quick-sale-section" class="quick-sale hidden">
-        <div id="quick-sale-input">
-          <button id="quick-sale-mic-btn" class="mic-btn">
-            <span class="mic-icon">🎤</span>
-            <span class="mic-label">Tap to speak</span>
-          </button>
-          <div class="qs-divider">or type below</div>
-          <textarea id="quick-sale-text" class="quick-sale-textarea" rows="2" maxlength="500"
-                    placeholder="e.g. sold a blue lamp for $5"></textarea>
-          <div class="quick-sale-row">
-            <button id="quick-sale-analyze-btn" class="btn primary">Analyze</button>
-            <button id="quick-sale-cancel-btn" class="btn secondary">Cancel</button>
+      <div class="capture-section">
+        <h3 class="section-title">Add Sale</h3>
+        <div id="sale-input-area">
+          <div class="sale-input-row">
+            <textarea id="quick-sale-text" class="quick-sale-textarea" rows="2" maxlength="500"
+                      placeholder="e.g. sold a blue lamp for $5"></textarea>
+            <button id="quick-sale-mic-btn" class="mic-circle" aria-label="Record">🎤</button>
           </div>
+          <button id="quick-sale-analyze-btn" class="btn primary hidden">Log Sale</button>
         </div>
         <div id="quick-sale-confirm" class="hidden">
           <div class="quick-sale-result">
@@ -86,16 +86,6 @@
         </div>
         <p id="quick-sale-error" class="error small hidden"></p>
       </div>
-
-      <div id="photo-strip" class="photo-strip hidden"></div>
-
-      <div id="notes-row" class="notes-row hidden">
-        <button id="notes-toggle" class="link-btn small">＋ Add notes</button>
-        <input type="text" id="notes-input" class="notes-input hidden"
-               placeholder="e.g. works, missing remote" maxlength="200">
-      </div>
-
-      <button id="get-price-btn" class="btn primary hidden">Get Price</button>
 
       <div id="capture-error" class="error-box hidden">
         <span id="capture-error-msg"></span>
