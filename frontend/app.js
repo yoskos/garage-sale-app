@@ -193,7 +193,13 @@ async function resolveAllUploads() {
 }
 
 // ─── Capture UI ───────────────────────────────────────────────────────────────
+let _thumbUrls = []; // track blob URLs so we can revoke on each redraw
+
 function updateCaptureUI() {
+  // Revoke stale object URLs before rebuilding thumbnails
+  _thumbUrls.forEach(u => URL.revokeObjectURL(u));
+  _thumbUrls = [];
+
   const count      = capturedItems.length;
   const shutterBtn = document.getElementById('shutter-btn');
   const strip      = document.getElementById('photo-strip');
@@ -210,6 +216,7 @@ function updateCaptureUI() {
   strip.innerHTML = '';
   capturedItems.forEach((item, i) => {
     const url  = URL.createObjectURL(item.blob);
+    _thumbUrls.push(url);
     const wrap = document.createElement('div');
     wrap.className = 'photo-thumb';
     const img = document.createElement('img');
@@ -219,7 +226,6 @@ function updateCaptureUI() {
     rm.className = 'thumb-remove';
     rm.textContent = '×';
     rm.addEventListener('click', () => {
-      URL.revokeObjectURL(url);
       capturedItems.splice(i, 1);
       updateCaptureUI();
     });
@@ -300,7 +306,9 @@ function initCapture() {
     if (!file) return;
     photoInput.value = '';
     errorBox.classList.add('hidden');
-    shutterBtn.disabled = true;
+    // Do NOT set shutterBtn.disabled here — synchronous DOM changes before
+    // an await cause Android/iOS to "lock" the render batch, and the async
+    // updates that follow don't paint until the next user gesture.
     try {
       const blob = await prepareImage(file);
       const item = { blob, resolvedId: null, pendingUpload: null, failed: false };
@@ -309,9 +317,10 @@ function initCapture() {
     } catch {
       showCaptureError('Failed to process image — try again.');
     } finally {
-      // Double rAF: iOS Safari defers DOM repaints after returning from camera
-      // until the next user interaction. Two animation frames force a flush.
-      requestAnimationFrame(() => requestAnimationFrame(updateCaptureUI));
+      updateCaptureUI();
+      // Belt-and-suspenders: mobile browsers sometimes defer repaints after
+      // returning from the camera app; a second call in a new task flushes it.
+      setTimeout(updateCaptureUI, 50);
     }
   });
 
@@ -397,16 +406,20 @@ function showResult() {
 }
 
 function initResult() {
-  const soldBtn    = document.getElementById('sold-btn');
-  const notSoldBtn = document.getElementById('not-sold-btn');
-  const reshootBtn = document.getElementById('reshoot-btn');
-  const refineBtn  = document.getElementById('refine-btn');
-  const soldForm   = document.getElementById('sold-form');
-  const actions    = document.getElementById('result-actions');
-  const confirmBtn = document.getElementById('sold-confirm-btn');
-  const cancelBtn  = document.getElementById('sold-cancel-btn');
-  const errorBox   = document.getElementById('result-error');
-  const errorMsg   = document.getElementById('result-error-msg');
+  const soldBtn       = document.getElementById('sold-btn');
+  const notSoldBtn    = document.getElementById('not-sold-btn');
+  const reshootBtn    = document.getElementById('reshoot-btn');
+  const refineBtn     = document.getElementById('refine-btn');
+  const soldForm      = document.getElementById('sold-form');
+  const refineForm    = document.getElementById('refine-form');
+  const refineInput   = document.getElementById('refine-notes-input');
+  const refineRetry   = document.getElementById('refine-retry-btn');
+  const refineCancel  = document.getElementById('refine-cancel-btn');
+  const actions       = document.getElementById('result-actions');
+  const confirmBtn    = document.getElementById('sold-confirm-btn');
+  const cancelBtn     = document.getElementById('sold-cancel-btn');
+  const errorBox      = document.getElementById('result-error');
+  const errorMsg      = document.getElementById('result-error-msg');
 
   soldBtn.addEventListener('click', () => {
     actions.classList.add('hidden');
@@ -420,22 +433,41 @@ function initResult() {
   });
 
   refineBtn.addEventListener('click', () => {
-    // Keep photos, but server files were deleted after /price — force fresh uploads.
-    capturedItems.forEach(item => {
-      item.resolvedId = null;
-      item.pendingUpload = null;
-      item.failed = false;
-      startUpload(item);
-    });
-    updateCaptureUI();
-    showView('view-capture');
-    // Expand notes input so the user can type immediately.
-    const notesInput  = document.getElementById('notes-input');
-    const notesToggle = document.getElementById('notes-toggle');
-    notesInput.classList.remove('hidden');
-    notesToggle.textContent = '－ Notes';
-    notesInput.value = lastNotes;
-    setTimeout(() => notesInput.focus(), 80);
+    actions.classList.add('hidden');
+    refineForm.classList.remove('hidden');
+    refineInput.value = lastNotes;
+    refineInput.focus();
+  });
+
+  refineCancel.addEventListener('click', () => {
+    refineForm.classList.add('hidden');
+    actions.classList.remove('hidden');
+  });
+
+  refineRetry.addEventListener('click', async () => {
+    lastNotes = refineInput.value.trim();
+    refineRetry.disabled = refineCancel.disabled = true;
+    refineRetry.textContent = 'Analyzing…';
+    errorBox.classList.add('hidden');
+    try {
+      // Server files were deleted after the last /price — force fresh uploads.
+      capturedItems.forEach(item => {
+        item.resolvedId = null;
+        item.pendingUpload = null;
+        item.failed = false;
+        startUpload(item);
+      });
+      const uploadIds = await resolveAllUploads();
+      lastResult = await apiPrice(uploadIds, lastNotes);
+      refineForm.classList.add('hidden');
+      showResult(); // re-renders the card and shows actions again
+    } catch (err) {
+      errorMsg.textContent = errorMessage(err);
+      errorBox.classList.remove('hidden');
+    } finally {
+      refineRetry.disabled = refineCancel.disabled = false;
+      refineRetry.textContent = 'Try again';
+    }
   });
 
   reshootBtn.addEventListener('click', () => {
