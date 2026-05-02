@@ -146,6 +146,23 @@ async function apiSale(requestId, itemLabel, suggestedPrice, soldPrice, sold) {
   if (!resp.ok) throw new Error((await resp.json()).detail || resp.statusText);
 }
 
+async function apiParseSale(text) {
+  const payload = JSON.stringify({ text });
+  const body = new TextEncoder().encode(payload);
+  const { ts, sig } = await sign(cfg.secret, body);
+  const resp = await fetch(`${cfg.url}/parse-sale`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-Timestamp': ts, 'X-Signature': sig },
+    body,
+  });
+  let data;
+  try { data = await resp.json(); } catch {
+    throw Object.assign(new Error(`HTTP ${resp.status}`), { status: resp.status });
+  }
+  if (!resp.ok) throw Object.assign(new Error(data?.detail || resp.statusText), { status: resp.status, data });
+  return data; // { item_label, sold_price_usd }
+}
+
 async function apiSummary() {
   const body = new Uint8Array(0);
   const { ts, sig } = await sign(cfg.secret, body);
@@ -563,6 +580,99 @@ function initHistory() {
   document.getElementById('history-refresh-btn').addEventListener('click', loadHistory);
 }
 
+// ─── Quick Sale ───────────────────────────────────────────────────────────────
+function initQuickSale() {
+  const quickSaleBtn     = document.getElementById('quick-sale-btn');
+  const section          = document.getElementById('quick-sale-section');
+  const inputDiv         = document.getElementById('quick-sale-input');
+  const confirmDiv       = document.getElementById('quick-sale-confirm');
+  const textarea         = document.getElementById('quick-sale-text');
+  const analyzeBtn       = document.getElementById('quick-sale-analyze-btn');
+  const cancelBtn        = document.getElementById('quick-sale-cancel-btn');
+  const itemEl           = document.getElementById('quick-sale-item');
+  const priceEl          = document.getElementById('quick-sale-price');
+  const confirmBtn       = document.getElementById('quick-sale-confirm-btn');
+  const editBtn          = document.getElementById('quick-sale-edit-btn');
+  const errorEl          = document.getElementById('quick-sale-error');
+
+  let parsed = null; // { item_label, sold_price_usd }
+
+  function reset() {
+    section.classList.add('hidden');
+    inputDiv.classList.remove('hidden');
+    confirmDiv.classList.add('hidden');
+    errorEl.classList.add('hidden');
+    textarea.value = '';
+    parsed = null;
+  }
+
+  quickSaleBtn.addEventListener('click', () => {
+    section.classList.remove('hidden');
+    textarea.focus();
+  });
+
+  cancelBtn.addEventListener('click', reset);
+
+  analyzeBtn.addEventListener('click', async () => {
+    const text = textarea.value.trim();
+    if (!text) { errorEl.textContent = 'Describe the sale first.'; errorEl.classList.remove('hidden'); return; }
+    errorEl.classList.add('hidden');
+    analyzeBtn.disabled = cancelBtn.disabled = true;
+    analyzeBtn.textContent = 'Analyzing…';
+    try {
+      parsed = await apiParseSale(text);
+      itemEl.textContent = parsed.item_label;
+      priceEl.textContent = parsed.sold_price_usd > 0 ? `$${parsed.sold_price_usd}` : '—';
+      inputDiv.classList.add('hidden');
+      confirmDiv.classList.remove('hidden');
+    } catch (err) {
+      errorEl.textContent = errorMessage(err);
+      errorEl.classList.remove('hidden');
+    } finally {
+      analyzeBtn.disabled = cancelBtn.disabled = false;
+      analyzeBtn.textContent = 'Analyze';
+    }
+  });
+
+  editBtn.addEventListener('click', () => {
+    confirmDiv.classList.add('hidden');
+    inputDiv.classList.remove('hidden');
+  });
+
+  confirmBtn.addEventListener('click', async () => {
+    if (!parsed) return;
+    confirmBtn.disabled = editBtn.disabled = true;
+    confirmBtn.textContent = 'Saving…';
+    errorEl.classList.add('hidden');
+    try {
+      const payload = JSON.stringify({
+        request_id: null,
+        item_label: parsed.item_label,
+        suggested_price_usd: null,
+        sold_price_usd: parsed.sold_price_usd,
+        sold: true,
+        notes: null,
+      });
+      const body = new TextEncoder().encode(payload);
+      const { ts, sig } = await sign(cfg.secret, body);
+      const resp = await fetch(`${cfg.url}/sale`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Timestamp': ts, 'X-Signature': sig },
+        body,
+      });
+      if (!resp.ok) throw new Error((await resp.json()).detail || resp.statusText);
+      // Brief success flash then reset
+      confirmBtn.textContent = '✓ Logged!';
+      setTimeout(reset, 800);
+    } catch (err) {
+      errorEl.textContent = errorMessage(err);
+      errorEl.classList.remove('hidden');
+      confirmBtn.disabled = editBtn.disabled = false;
+      confirmBtn.textContent = 'Confirm Sale';
+    }
+  });
+}
+
 // ─── Boot ─────────────────────────────────────────────────────────────────────
 function init() {
   if (!crypto.subtle) {
@@ -572,6 +682,7 @@ function init() {
 
   initSetup();
   initCapture();
+  initQuickSale();
   initResult();
   initHistory();
 

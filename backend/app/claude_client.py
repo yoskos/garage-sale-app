@@ -79,6 +79,28 @@ async def _call(client, model: str, system: str, content: list[dict], max_tokens
     return _parse_json(text, model, response.stop_reason)
 
 
+_PARSE_SALE_SYSTEM = """\
+Extract the item name and sale price from a free-text sale description.
+Respond ONLY with JSON matching this schema exactly:
+
+{
+  "item_label": "<concise item description, max 80 chars>",
+  "sold_price_usd": <number, use 0 if price not mentioned>
+}
+
+Do not include any text outside the JSON object.\
+"""
+
+
+async def parse_sale_text(text: str) -> dict:
+    client = _get_client()
+    return await _call(
+        client, _VISION_MODEL, _PARSE_SALE_SYSTEM,
+        [{"type": "text", "text": text}],
+        max_tokens=128,
+    )
+
+
 async def identify_and_price(images_bytes: list[bytes], notes: str | None) -> dict:
     client = _get_client()
 

@@ -56,6 +56,30 @@
         <span class="shutter-label">Take Photo</span>
       </button>
 
+      <button id="quick-sale-btn" class="btn secondary">Register Sale</button>
+
+      <div id="quick-sale-section" class="quick-sale hidden">
+        <div id="quick-sale-input">
+          <textarea id="quick-sale-text" class="quick-sale-textarea" rows="3" maxlength="500"
+                    placeholder="e.g. sold a blue lamp for $5"></textarea>
+          <div class="quick-sale-row">
+            <button id="quick-sale-analyze-btn" class="btn primary">Analyze</button>
+            <button id="quick-sale-cancel-btn" class="btn secondary">Cancel</button>
+          </div>
+        </div>
+        <div id="quick-sale-confirm" class="hidden">
+          <div class="quick-sale-result">
+            <span id="quick-sale-item" class="quick-sale-item"></span>
+            <span id="quick-sale-price" class="quick-sale-price"></span>
+          </div>
+          <div class="quick-sale-row">
+            <button id="quick-sale-confirm-btn" class="btn primary">Confirm Sale</button>
+            <button id="quick-sale-edit-btn" class="btn secondary">Edit</button>
+          </div>
+        </div>
+        <p id="quick-sale-error" class="error small hidden"></p>
+      </div>
+
       <div id="photo-strip" class="photo-strip hidden"></div>
 
       <div id="notes-row" class="notes-row hidden">

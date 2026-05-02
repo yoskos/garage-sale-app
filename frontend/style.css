@@ -369,6 +369,48 @@ html, body {
 
 .sold-form-btns .btn { flex: 1; }
 
+/* ── Quick Sale ────────────────────────────────────────────────────────── */
+.quick-sale {
+  width: 100%;
+  max-width: 400px;
+  background: var(--white);
+  border-radius: var(--radius);
+  padding: 16px;
+  box-shadow: var(--shadow);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.quick-sale-textarea {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: .95rem;
+  font-family: inherit;
+  resize: none;
+  background: var(--white);
+}
+
+.quick-sale-row {
+  display: flex;
+  gap: 10px;
+}
+
+.quick-sale-row .btn { flex: 1; }
+
+.quick-sale-result {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 0;
+  gap: 8px;
+}
+
+.quick-sale-item  { font-weight: 600; font-size: .95rem; }
+.quick-sale-price { font-size: 1.25rem; font-weight: 700; color: var(--blue); flex-shrink: 0; }
+
 /* ── History ───────────────────────────────────────────────────────────── */
 .summary-card {
   background: var(--blue);

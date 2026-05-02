@@ -11,11 +11,12 @@ from fastapi.staticfiles import StaticFiles
 
 from .auth import HmacMiddleware
 from .cache import get_cached_price, store_price
-from .claude_client import identify_and_price
+from .claude_client import identify_and_price, parse_sale_text
 from .db import get_conn, init_db
 from .images import preprocess_image
 from .schemas import (
-    HealthResponse, PriceRequest, PriceResponse,
+    HealthResponse, ParseSaleRequest, ParseSaleResponse,
+    PriceRequest, PriceResponse,
     SaleRequest, SaleResponse, SummaryResponse, UploadResponse,
 )
 from .settings import settings
@@ -131,6 +132,22 @@ async def price_item(request: Request, body: PriceRequest) -> PriceResponse:
         price_range_usd=result["price_range_usd"],
         retail_price_new_usd=result.get("retail_price_new_usd"),
         rationale=result["rationale"],
+    )
+
+
+@app.post("/parse-sale", response_model=ParseSaleResponse)
+async def parse_sale(request: Request, body: ParseSaleRequest) -> ParseSaleResponse:
+    _check_rate_limit(request)
+    if not body.text.strip():
+        raise HTTPException(status_code=400, detail="Text is required")
+    try:
+        result = await parse_sale_text(body.text)
+    except Exception as exc:
+        log.exception("parse-sale error: %s", exc)
+        raise HTTPException(status_code=503, detail="Could not parse sale description")
+    return ParseSaleResponse(
+        item_label=result["item_label"],
+        sold_price_usd=float(result.get("sold_price_usd", 0)),
     )
 
 

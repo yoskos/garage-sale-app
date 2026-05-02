@@ -48,6 +48,15 @@ class UploadResponse(BaseModel):
     upload_id: str
 
 
+class ParseSaleRequest(BaseModel):
+    text: str
+
+
+class ParseSaleResponse(BaseModel):
+    item_label: str
+    sold_price_usd: float
+
+
 class PriceRequest(BaseModel):
     upload_ids: list[str]
     notes: str | None = None
