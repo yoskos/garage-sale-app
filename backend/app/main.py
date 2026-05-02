@@ -4,9 +4,7 @@ import time
 import uuid
 from pathlib import Path
 
-from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
-
-log = logging.getLogger(__name__)
+from fastapi import FastAPI, File, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -16,11 +14,17 @@ from .cache import get_cached_price, store_price
 from .claude_client import identify_and_price
 from .db import get_conn, init_db
 from .images import preprocess_image
-from .schemas import HealthResponse, PriceResponse, SaleRequest, SaleResponse, SummaryResponse
+from .schemas import (
+    HealthResponse, PriceRequest, PriceResponse,
+    SaleRequest, SaleResponse, SummaryResponse, UploadResponse,
+)
 from .settings import settings
+
+log = logging.getLogger(__name__)
 
 _MAX_IMAGE_BYTES = 4 * 1024 * 1024  # 4 MB
 _FRONTEND_DIR = Path(__file__).parent.parent.parent / "frontend"
+_UPLOAD_DIR = Path(settings.cache_dir) / "uploads"
 
 # In-memory token bucket: ip -> (last_refill_ts, tokens)
 _rate_buckets: dict[str, tuple[float, float]] = {}
@@ -52,6 +56,7 @@ app.add_middleware(
 def startup() -> None:
     import os
     os.makedirs(settings.cache_dir, exist_ok=True)
+    os.makedirs(str(_UPLOAD_DIR), exist_ok=True)
     init_db()
 
 
@@ -60,44 +65,59 @@ def health() -> HealthResponse:
     return HealthResponse(ok=True)
 
 
+@app.post("/upload", response_model=UploadResponse)
+async def upload_image(request: Request, image: UploadFile = File(...)) -> UploadResponse:
+    _check_rate_limit(request)
+    data = await image.read()
+    if len(data) > _MAX_IMAGE_BYTES:
+        raise HTTPException(status_code=413, detail="Image too large (max 4 MB)")
+    try:
+        processed, _ = preprocess_image(data)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid image")
+    upload_id = str(uuid.uuid4())
+    (_UPLOAD_DIR / f"{upload_id}.jpg").write_bytes(processed)
+    return UploadResponse(upload_id=upload_id)
+
+
 @app.post("/price", response_model=PriceResponse)
-async def price_item(
-    request: Request,
-    images: list[UploadFile] = File(...),
-    notes: str | None = Form(None),
-) -> PriceResponse:
+async def price_item(request: Request, body: PriceRequest) -> PriceResponse:
     _check_rate_limit(request)
 
-    if not images or len(images) > 3:
-        raise HTTPException(status_code=400, detail="Send 1–3 images")
+    if not body.upload_ids or len(body.upload_ids) > 3:
+        raise HTTPException(status_code=400, detail="Send 1–3 upload IDs")
 
     all_processed: list[bytes] = []
     all_hashes: list[str] = []
-    for img in images:
-        data = await img.read()
-        if len(data) > _MAX_IMAGE_BYTES:
-            raise HTTPException(status_code=413, detail="Image too large (max 4 MB)")
-        try:
-            processed, image_hash = preprocess_image(data)
-        except Exception:
-            raise HTTPException(status_code=400, detail="Invalid image")
-        all_processed.append(processed)
-        all_hashes.append(image_hash)
+    upload_paths: list[Path] = []
+    for uid in body.upload_ids:
+        path = _UPLOAD_DIR / f"{uid}.jpg"
+        if not path.exists():
+            raise HTTPException(status_code=404, detail=f"Upload expired or not found: {uid}")
+        data = path.read_bytes()
+        all_processed.append(data)
+        all_hashes.append(hashlib.sha256(data).hexdigest())
+        upload_paths.append(path)
 
-    notes_key = notes or ""
+    notes_key = body.notes or ""
     combined_hash = hashlib.sha256(":".join(all_hashes).encode()).hexdigest()
 
     cached = get_cached_price(combined_hash, notes_key)
     if cached is not None:
+        for p in upload_paths:
+            p.unlink(missing_ok=True)
         return PriceResponse(cache_hit=True, request_id=cached["_request_id"], **{
             k: v for k, v in cached.items() if not k.startswith("_")
         })
 
     try:
-        result = await identify_and_price(all_processed, notes)
+        result = await identify_and_price(all_processed, body.notes)
     except Exception as exc:
         log.exception("Claude API error: %s", exc)
         raise HTTPException(status_code=503, detail="Claude API unavailable")
+
+    for p in upload_paths:
+        p.unlink(missing_ok=True)
 
     request_id = str(uuid.uuid4())
     store_price(combined_hash, notes_key, request_id, {**result, "_request_id": request_id})

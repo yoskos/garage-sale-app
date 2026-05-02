@@ -8,18 +8,19 @@ const cfg = {
 };
 
 // ─── State ───────────────────────────────────────────────────────────────────
-let lastResult    = null;   // PriceResponse from last /price call
-let capturedBlobs = [];     // up to 3 prepared Blobs (kept for retry)
+let lastResult    = null;
+// Each entry: { blob, resolvedId: string|null, pendingUpload: Promise|null, failed: bool }
+let capturedItems = [];
 let lastNotes     = '';
 let elapsedTimer  = null;
 
 // ─── Crypto ──────────────────────────────────────────────────────────────────
-async function sha256Hex(data /* Uint8Array | ArrayBuffer */) {
+async function sha256Hex(data) {
   const buf = await crypto.subtle.digest('SHA-256', data);
   return [...new Uint8Array(buf)].map(b => b.toString(16).padStart(2, '0')).join('');
 }
 
-async function sign(secret, bodyBytes /* Uint8Array */) {
+async function sign(secret, bodyBytes) {
   const ts = Math.floor(Date.now() / 1000).toString();
   const bodyHash = await sha256Hex(bodyBytes);
   const key = await crypto.subtle.importKey(
@@ -50,40 +51,10 @@ async function prepareImage(file) {
     canvas.getContext('2d').drawImage(bitmap, 0, 0, w, h);
     return canvas.convertToBlob({ type: 'image/jpeg', quality: 0.8 });
   }
-  // Fallback for older Safari
   const canvas = document.createElement('canvas');
   canvas.width = w; canvas.height = h;
   canvas.getContext('2d').drawImage(bitmap, 0, 0, w, h);
   return new Promise(res => canvas.toBlob(res, 'image/jpeg', 0.8));
-}
-
-// Build a multipart body manually so we can sign the exact bytes we send.
-async function buildMultipart(imageBlobs, notes) {
-  const boundary = 'GSBoundary' + Math.random().toString(36).slice(2, 12);
-  const enc = new TextEncoder();
-
-  const parts = [];
-  for (const blob of imageBlobs) {
-    const imageBytes = new Uint8Array(await blob.arrayBuffer());
-    parts.push(
-      enc.encode(`--${boundary}\r\nContent-Disposition: form-data; name="images"; filename="photo.jpg"\r\nContent-Type: image/jpeg\r\n\r\n`),
-      imageBytes,
-      enc.encode('\r\n'),
-    );
-  }
-  if (notes && notes.trim()) {
-    parts.push(enc.encode(
-      `--${boundary}\r\nContent-Disposition: form-data; name="notes"\r\n\r\n${notes.trim()}\r\n`,
-    ));
-  }
-  parts.push(enc.encode(`--${boundary}--\r\n`));
-
-  const total = parts.reduce((n, p) => n + p.length, 0);
-  const body = new Uint8Array(total);
-  let off = 0;
-  for (const p of parts) { body.set(p, off); off += p.length; }
-
-  return { body, contentType: `multipart/form-data; boundary=${boundary}` };
 }
 
 // ─── API calls ───────────────────────────────────────────────────────────────
@@ -92,50 +63,68 @@ async function apiHealth(url) {
   return resp.ok;
 }
 
-async function apiPrice(imageBlobs, notes, { onStatus, onProgress } = {}) {
-  onStatus?.('Building request…');
-  const { body, contentType } = await buildMultipart(imageBlobs, notes);
+// POST a single image to /upload; returns upload_id string.
+async function apiUpload(blob) {
+  const boundary = 'GSBoundary' + Math.random().toString(36).slice(2, 12);
+  const enc = new TextEncoder();
+  const imageBytes = new Uint8Array(await blob.arrayBuffer());
+  const parts = [
+    enc.encode(`--${boundary}\r\nContent-Disposition: form-data; name="image"; filename="photo.jpg"\r\nContent-Type: image/jpeg\r\n\r\n`),
+    imageBytes,
+    enc.encode(`\r\n--${boundary}--\r\n`),
+  ];
+  const total = parts.reduce((n, p) => n + p.length, 0);
+  const body = new Uint8Array(total);
+  let off = 0;
+  for (const p of parts) { body.set(p, off); off += p.length; }
+
   const { ts, sig } = await sign(cfg.secret, body);
+  const contentType = `multipart/form-data; boundary=${boundary}`;
 
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
-    xhr.open('POST', `${cfg.url}/price`);
+    xhr.open('POST', `${cfg.url}/upload`);
     xhr.setRequestHeader('Content-Type', contentType);
     xhr.setRequestHeader('X-Timestamp', ts);
     xhr.setRequestHeader('X-Signature', sig);
-
-    xhr.upload.addEventListener('progress', e => {
-      if (e.lengthComputable) {
-        const pct = e.loaded / e.total;
-        onProgress?.(Math.round(pct * 70));
-        onStatus?.(`Uploading… ${Math.round(pct * 100)}%`);
-      }
-    });
-
-    xhr.upload.addEventListener('load', () => {
-      onProgress?.(75);
-      onStatus?.('Analyzing item…');
-    });
-
     xhr.addEventListener('load', () => {
-      onProgress?.(100);
       let data;
       try { data = JSON.parse(xhr.responseText); } catch {
         reject(Object.assign(new Error(`HTTP ${xhr.status}`), { status: xhr.status }));
         return;
       }
-      if (xhr.status >= 200 && xhr.status < 300) {
-        resolve(data);
-      } else {
-        reject(Object.assign(new Error(data?.detail || xhr.statusText), { status: xhr.status, data }));
-      }
+      if (xhr.status >= 200 && xhr.status < 300) resolve(data.upload_id);
+      else reject(Object.assign(new Error(data?.detail || xhr.statusText), { status: xhr.status, data }));
     });
-
     xhr.addEventListener('error', () =>
       reject(Object.assign(new Error('Network error — check connection'), { status: 0 })));
-
     xhr.send(body);
   });
+}
+
+// POST upload IDs + notes to /price; returns PriceResponse.
+async function apiPrice(uploadIds, notes, { onStatus, onProgress } = {}) {
+  onStatus?.('Analyzing item…');
+  onProgress?.(75);
+  const payload = JSON.stringify({ upload_ids: uploadIds, notes: notes || null });
+  const body = new TextEncoder().encode(payload);
+  const { ts, sig } = await sign(cfg.secret, body);
+  const resp = await fetch(`${cfg.url}/price`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Timestamp': ts,
+      'X-Signature': sig,
+    },
+    body,
+  });
+  onProgress?.(100);
+  let data;
+  try { data = await resp.json(); } catch {
+    throw Object.assign(new Error(`HTTP ${resp.status}`), { status: resp.status });
+  }
+  if (!resp.ok) throw Object.assign(new Error(data?.detail || resp.statusText), { status: resp.status, data });
+  return data;
 }
 
 async function apiSale(requestId, itemLabel, suggestedPrice, soldPrice, sold) {
@@ -151,11 +140,7 @@ async function apiSale(requestId, itemLabel, suggestedPrice, soldPrice, sold) {
   const { ts, sig } = await sign(cfg.secret, body);
   const resp = await fetch(`${cfg.url}/sale`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'X-Timestamp': ts,
-      'X-Signature': sig,
-    },
+    headers: { 'Content-Type': 'application/json', 'X-Timestamp': ts, 'X-Signature': sig },
     body,
   });
   if (!resp.ok) throw new Error((await resp.json()).detail || resp.statusText);
@@ -181,6 +166,7 @@ function showView(id) {
 function errorMessage(err) {
   const status = err.status;
   if (status === 401) return 'Bad signature — re-check Setup';
+  if (status === 404) return 'Upload expired — please retry';
   if (status === 413) return 'Image too large — try again';
   if (status === 429) return 'Slow down a sec';
   if (status >= 500) {
@@ -188,6 +174,59 @@ function errorMessage(err) {
     return rid ? `Server error (${rid})` : 'Server error — check connection';
   }
   return err.message || 'Network error — check connection';
+}
+
+// ─── Upload management ────────────────────────────────────────────────────────
+function startUpload(item) {
+  item.failed = false;
+  item.pendingUpload = apiUpload(item.blob)
+    .then(id  => { item.resolvedId = id; return id; })
+    .catch(err => { item.failed = true; throw err; });
+}
+
+async function resolveAllUploads() {
+  return Promise.all(capturedItems.map(item => {
+    if (item.resolvedId) return item.resolvedId;
+    if (item.failed) startUpload(item); // retry failed uploads
+    return item.pendingUpload;
+  }));
+}
+
+// ─── Capture UI ───────────────────────────────────────────────────────────────
+function updateCaptureUI() {
+  const count      = capturedItems.length;
+  const shutterBtn = document.getElementById('shutter-btn');
+  const strip      = document.getElementById('photo-strip');
+  const notesRow   = document.getElementById('notes-row');
+  const priceBtn   = document.getElementById('get-price-btn');
+
+  shutterBtn.querySelector('.shutter-label').textContent =
+    count === 0 ? 'Take Photo' : `Add photo (${count}/3)`;
+  shutterBtn.disabled = count >= 3;
+  strip.classList.toggle('hidden', count === 0);
+  notesRow.classList.toggle('hidden', count === 0);
+  priceBtn.classList.toggle('hidden', count === 0);
+
+  strip.innerHTML = '';
+  capturedItems.forEach((item, i) => {
+    const url  = URL.createObjectURL(item.blob);
+    const wrap = document.createElement('div');
+    wrap.className = 'photo-thumb';
+    const img = document.createElement('img');
+    img.src = url;
+    img.alt = `Photo ${i + 1}`;
+    const rm = document.createElement('button');
+    rm.className = 'thumb-remove';
+    rm.textContent = '×';
+    rm.addEventListener('click', () => {
+      URL.revokeObjectURL(url);
+      capturedItems.splice(i, 1);
+      updateCaptureUI();
+    });
+    wrap.appendChild(img);
+    wrap.appendChild(rm);
+    strip.appendChild(wrap);
+  });
 }
 
 // ─── Setup view ───────────────────────────────────────────────────────────────
@@ -230,41 +269,6 @@ function initSetup() {
   });
 }
 
-// ─── Capture UI state (called from result view too) ──────────────────────────
-function updateCaptureUI() {
-  const count      = capturedBlobs.length;
-  const shutterBtn = document.getElementById('shutter-btn');
-  const strip      = document.getElementById('photo-strip');
-  const priceBtn   = document.getElementById('get-price-btn');
-
-  shutterBtn.querySelector('.shutter-label').textContent =
-    count === 0 ? 'Take Photo' : `Add photo (${count}/3)`;
-  shutterBtn.disabled = count >= 3;
-  strip.classList.toggle('hidden', count === 0);
-  priceBtn.classList.toggle('hidden', count === 0);
-
-  strip.innerHTML = '';
-  capturedBlobs.forEach((blob, i) => {
-    const url  = URL.createObjectURL(blob);
-    const wrap = document.createElement('div');
-    wrap.className = 'photo-thumb';
-    const img = document.createElement('img');
-    img.src = url;
-    img.alt = `Photo ${i + 1}`;
-    const rm = document.createElement('button');
-    rm.className = 'thumb-remove';
-    rm.textContent = '×';
-    rm.addEventListener('click', () => {
-      URL.revokeObjectURL(url);
-      capturedBlobs.splice(i, 1);
-      updateCaptureUI();
-    });
-    wrap.appendChild(img);
-    wrap.appendChild(rm);
-    strip.appendChild(wrap);
-  });
-}
-
 // ─── Capture view ─────────────────────────────────────────────────────────────
 function initCapture() {
   const photoInput  = document.getElementById('photo-input');
@@ -299,32 +303,36 @@ function initCapture() {
     shutterBtn.disabled = true;
     try {
       const blob = await prepareImage(file);
-      capturedBlobs.push(blob);
+      const item = { blob, resolvedId: null, pendingUpload: null, failed: false };
+      capturedItems.push(item);
+      startUpload(item); // fire-and-forget background upload
       updateCaptureUI();
     } catch {
       showCaptureError('Failed to process image — try again.');
-      shutterBtn.disabled = capturedBlobs.length >= 3;
+      shutterBtn.disabled = capturedItems.length >= 3;
     }
   });
 
   document.getElementById('get-price-btn').addEventListener('click', async () => {
-    if (!capturedBlobs.length) return;
+    if (!capturedItems.length) return;
     lastNotes = notesInput.value;
     errorBox.classList.add('hidden');
-    startLoading('Preparing…');
+    startLoading('Uploading photos…');
     await submitPrice();
   });
 
   retryBtn.addEventListener('click', async () => {
-    if (!capturedBlobs.length) return;
+    if (!capturedItems.length) return;
     errorBox.classList.add('hidden');
-    startLoading('Retrying…');
+    startLoading('Uploading photos…');
     await submitPrice();
   });
 
   async function submitPrice() {
     try {
-      lastResult = await apiPrice(capturedBlobs, lastNotes, {
+      setProgress(10);
+      const uploadIds = await resolveAllUploads();
+      lastResult = await apiPrice(uploadIds, lastNotes, {
         onStatus: setStatus,
         onProgress: setProgress,
       });
@@ -377,9 +385,7 @@ function showResult() {
   document.getElementById('result-condition').textContent = r.condition_observed;
   document.getElementById('result-rationale').textContent = r.rationale;
 
-  const cachedBadge = document.getElementById('result-cached');
-  cachedBadge.classList.toggle('hidden', !r.cache_hit);
-
+  document.getElementById('result-cached').classList.toggle('hidden', !r.cache_hit);
   document.getElementById('result-error').classList.add('hidden');
   document.getElementById('sold-form').classList.add('hidden');
   document.getElementById('result-actions').classList.remove('hidden');
@@ -389,15 +395,15 @@ function showResult() {
 }
 
 function initResult() {
-  const soldBtn     = document.getElementById('sold-btn');
-  const notSoldBtn  = document.getElementById('not-sold-btn');
-  const reshootBtn  = document.getElementById('reshoot-btn');
-  const soldForm    = document.getElementById('sold-form');
-  const actions     = document.getElementById('result-actions');
-  const confirmBtn  = document.getElementById('sold-confirm-btn');
-  const cancelBtn   = document.getElementById('sold-cancel-btn');
-  const errorBox    = document.getElementById('result-error');
-  const errorMsg    = document.getElementById('result-error-msg');
+  const soldBtn    = document.getElementById('sold-btn');
+  const notSoldBtn = document.getElementById('not-sold-btn');
+  const reshootBtn = document.getElementById('reshoot-btn');
+  const soldForm   = document.getElementById('sold-form');
+  const actions    = document.getElementById('result-actions');
+  const confirmBtn = document.getElementById('sold-confirm-btn');
+  const cancelBtn  = document.getElementById('sold-cancel-btn');
+  const errorBox   = document.getElementById('result-error');
+  const errorMsg   = document.getElementById('result-error-msg');
 
   soldBtn.addEventListener('click', () => {
     actions.classList.add('hidden');
@@ -411,8 +417,9 @@ function initResult() {
   });
 
   reshootBtn.addEventListener('click', () => {
-    capturedBlobs = [];
+    capturedItems = [];
     lastResult = null;
+    document.getElementById('notes-input').value = '';
     updateCaptureUI();
     showView('view-capture');
   });
@@ -436,8 +443,9 @@ function initResult() {
         soldPrice,
         sold,
       );
-      capturedBlobs = [];
+      capturedItems = [];
       lastResult = null;
+      document.getElementById('notes-input').value = '';
       updateCaptureUI();
       showView('view-capture');
     } catch (err) {

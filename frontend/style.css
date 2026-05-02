@@ -154,6 +154,15 @@ html, body {
 .test-result.ok   { background: #dcfce7; color: var(--green); }
 .test-result.fail { background: #fee2e2; color: var(--red); }
 
+/* ── Capture header image ──────────────────────────────────────────────── */
+.capture-header {
+  display: block;
+  width: 100%;
+  max-height: 33vh;
+  object-fit: cover;
+  object-position: center top;
+}
+
 /* ── Capture ───────────────────────────────────────────────────────────── */
 .capture-body {
   display: flex;

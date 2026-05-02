@@ -41,3 +41,12 @@ class SummaryResponse(BaseModel):
 
 class HealthResponse(BaseModel):
     ok: bool
+
+
+class UploadResponse(BaseModel):
+    upload_id: str
+
+
+class PriceRequest(BaseModel):
+    upload_ids: list[str]
+    notes: str | None = None

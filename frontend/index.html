@@ -46,6 +46,8 @@
       <button id="capture-history-btn" class="link-btn">History</button>
     </div>
 
+    <img src="/static/garage-sale-header.png" class="capture-header" alt="Yosko's Garage Sale">
+
     <div class="capture-body">
       <input type="file" id="photo-input" accept="image/*" capture="environment" class="hidden">
 
@@ -56,13 +58,13 @@
 
       <div id="photo-strip" class="photo-strip hidden"></div>
 
-      <button id="get-price-btn" class="btn primary hidden">Get Price</button>
-
-      <div class="notes-row">
+      <div id="notes-row" class="notes-row hidden">
         <button id="notes-toggle" class="link-btn small">＋ Add notes</button>
         <input type="text" id="notes-input" class="notes-input hidden"
                placeholder="e.g. works, missing remote" maxlength="200">
       </div>
+
+      <button id="get-price-btn" class="btn primary hidden">Get Price</button>
 
       <div id="capture-error" class="error-box hidden">
         <span id="capture-error-msg"></span>
